@@ -1,0 +1,1475 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Трекер привычек</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  /* === Claude-style typography === */
+  html, body, button, input, textarea, select {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-feature-settings: "cv11", "ss01", "ss03";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.011em;
+  }
+  h1, h2, h3, h4, h5, h6, .habit-name, .progress-pct, .stat-num {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: -0.022em;
+    font-weight: 600;
+  }
+
+:root {
+  --bg:#F7F5F0; --surface:#FFF; --surface2:#F0EDE6; --border:rgba(0,0,0,0.08);
+  --text:#1A1814; --text2:#6B6760; --text3:#A8A49E; --accent:#2D6A4F;
+  --quote-bg:#2D6A4F;
+  --serif:'Instrument Serif',Georgia,serif; --sans:'DM Sans',sans-serif;
+  --radius:16px; --radius-sm:10px;
+  --shadow:0 1px 3px rgba(0,0,0,0.06),0 4px 16px rgba(0,0,0,0.04);
+}
+[data-theme="dark"] {
+  --bg:#111210; --surface:#1C1C1A; --surface2:#2A2A27; --border:rgba(255,255,255,0.10);
+  --text:#F0EDE6; --text2:#C0BCB5; --text3:#908C86; --accent:#52B788;
+  --quote-bg:#5B9BD5;
+  --shadow:0 1px 3px rgba(0,0,0,0.3),0 4px 16px rgba(0,0,0,0.2);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{min-height:100vh;background:var(--bg);font-family:var(--sans);color:var(--text);transition:background .3s,color .3s}
+.app{max-width:680px;margin:0 auto;padding:24px 16px 80px}
+
+/* ── AUTH SCREEN ── */
+.auth-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.auth-card{background:var(--surface);border:1px solid var(--border);border-radius:24px;padding:40px 32px;width:100%;max-width:400px;box-shadow:0 8px 40px rgba(0,0,0,0.10);text-align:center}
+.auth-logo{font-family:var(--serif);font-size:36px;font-style:italic;color:var(--text);margin-bottom:6px}
+.auth-sub{font-size:13px;color:var(--text3);margin-bottom:32px}
+.auth-tabs{display:flex;background:var(--surface2);border-radius:12px;padding:3px;margin-bottom:24px}
+.auth-tab{flex:1;padding:8px;border:none;background:none;border-radius:9px;font-family:var(--sans);font-size:13px;color:var(--text2);cursor:pointer;transition:all .2s}
+.auth-tab.active{background:var(--surface);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,0.10);font-weight:500}
+.auth-input{width:100%;padding:12px 16px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:var(--sans);font-size:14px;margin-bottom:12px;transition:border .2s;outline:none}
+.auth-input:focus{border-color:var(--accent)}
+.auth-btn{width:100%;padding:13px;border-radius:12px;border:none;background:var(--accent);color:#fff;font-family:var(--sans);font-size:14px;font-weight:500;cursor:pointer;transition:opacity .2s;margin-bottom:8px}
+.auth-btn:hover{opacity:.88}
+.auth-btn:disabled{opacity:.5;cursor:default}
+.auth-divider{display:flex;align-items:center;gap:12px;margin:16px 0;color:var(--text3);font-size:12px}
+.auth-divider::before,.auth-divider::after{content:'';flex:1;height:1px;background:var(--border)}
+.google-btn{width:100%;padding:12px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-family:var(--sans);font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:background .2s}
+.google-btn:hover{background:var(--surface2)}
+.google-btn svg{flex-shrink:0}
+.auth-msg{font-size:13px;margin-top:12px;min-height:20px;color:var(--text3)}
+.auth-msg.success{color:var(--accent)}
+.auth-msg.error{color:#dc2626}
+.magic-sent{text-align:center;padding:8px 0}
+.magic-sent .big-emoji{font-size:48px;margin-bottom:12px}
+.magic-sent p{color:var(--text2);font-size:14px;line-height:1.6}
+.magic-sent .email-highlight{font-weight:500;color:var(--text)}
+
+/* ── MAIN APP HEADER ── */
+.header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px}
+.header-left h1{font-family:var(--serif);font-size:clamp(26px,5vw,36px);font-weight:400;font-style:italic;line-height:1.1}
+.date-sub{font-size:12px;color:var(--text3);margin-top:4px;letter-spacing:.03em;text-transform:uppercase}
+.sync-status{font-size:11px;color:var(--text3);margin-top:3px}
+.header-btns{display:flex;gap:8px;margin-top:4px;flex-shrink:0}
+.icon-btn{width:40px;height:40px;border-radius:50%;border:1px solid var(--border);background:var(--surface);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;transition:background .2s;color:var(--text)}
+.icon-btn:hover{background:var(--surface2)}
+.user-avatar{width:40px;height:40px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;cursor:pointer;border:1px solid var(--border);flex-shrink:0;margin-top:4px;position:relative}
+.user-menu{position:absolute;top:48px;right:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);min-width:180px;z-index:100;overflow:hidden;display:none}
+.user-menu.open{display:block}
+.user-menu-item{padding:12px 16px;font-size:13px;cursor:pointer;color:var(--text);transition:background .15s;display:flex;align-items:center;gap:8px}
+.user-menu-item:hover{background:var(--surface2)}
+.user-menu-item.danger{color:#dc2626}
+.user-email{padding:12px 16px;font-size:11px;color:var(--text3);border-bottom:1px solid var(--border)}
+
+/* ── QUOTE ── */
+.quote-card{background:var(--quote-bg);border-radius:var(--radius);padding:24px 20px;margin-bottom:24px;position:relative;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:90px}
+.quote-card::before{content:'\201C';position:absolute;top:-10px;left:12px;font-family:var(--serif);font-size:80px;color:rgba(255,255,255,0.15);line-height:1}
+.quote-text{font-family:var(--serif);font-size:15px;font-style:italic;color:rgba(255,255,255,.95);line-height:1.5;position:relative}
+.quote-author{font-size:11px;color:rgba(255,255,255,.6);margin-top:6px;letter-spacing:.05em;text-transform:uppercase}
+
+
+/* ── STATS ── */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:24px}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 10px;text-align:center;box-shadow:var(--shadow)}
+.stat-num{font-family:var(--serif);font-size:24px;color:var(--text)}
+.stat-label{font-size:10px;color:var(--text3);margin-top:2px;letter-spacing:.04em;text-transform:uppercase}
+
+/* ── NAV ── */
+.nav{display:flex;align-items:center;gap:8px;margin-bottom:16px}
+.nav-title{font-family:var(--serif);font-size:18px;font-style:italic;flex:1;text-align:center;color:var(--text)}
+.nav-btn{width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-size:16px;color:var(--text2);transition:background .2s;display:flex;align-items:center;justify-content:center}
+.nav-btn:hover{background:var(--surface2)}
+.view-toggle{display:flex;background:var(--surface2);border-radius:20px;padding:3px;gap:2px;margin-left:auto}
+.view-btn{padding:5px 12px;border-radius:16px;border:none;background:none;font-size:12px;font-family:var(--sans);color:var(--text2);cursor:pointer;transition:all .2s}
+.view-btn.active{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+
+/* ── WEEK ── */
+.week-grid-header{margin-bottom:6px}
+.day-col{text-align:center}
+.day-num{font-size:13px;font-weight:500;color:var(--text)}
+.day-name{font-size:10px;color:var(--text3);letter-spacing:.04em;text-transform:uppercase}
+.day-col.today .day-num,.day-col.today .day-name{color:var(--accent);font-weight:600}
+.habits-list{display:flex;flex-direction:column;gap:8px}
+.habit-card-week{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px 10px;box-shadow:var(--shadow)}
+.week-row{display:grid;gap:6px;align-items:center}
+.habit-label{display:flex;align-items:center;gap:8px;min-width:0}
+.habit-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.habit-name{font-size:14px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.habit-meta{font-size:11px;color:var(--text3);margin-top:1px}
+.dot-btn{width:36px;height:36px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:white;transition:all .15s}
+.dot-btn.done{border-color:transparent;transform:scale(1.04)}
+.dot-btn.future{opacity:.25;cursor:default;pointer-events:none}
+.dot-btn.today-hl:not(.done){border-color:var(--accent)}
+.dot-btn:not(.future):not(.done):hover{transform:scale(1.08);background:var(--surface)}
+.progress-wrap{margin-top:10px;display:flex;align-items:center;gap:8px}
+.progress-bar{flex:1;height:3px;background:var(--surface2);border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;border-radius:2px;transition:width .4s ease}
+.progress-pct{font-size:11px;color:var(--text3);min-width:28px;text-align:right}
+
+/* ── MONTH ── */
+.month-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow);margin-bottom:8px}
+.month-card-header{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.month-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:10px;cursor:grab}
+.month-scroll:active{cursor:grabbing}
+.month-scroll::-webkit-scrollbar{height:6px}
+.month-scroll::-webkit-scrollbar-track{background:var(--surface2);border-radius:3px}
+.month-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.month-scroll::-webkit-scrollbar-thumb:hover{background:var(--text3)}
+.demo-banner{display:none!important}
+.month-days-wrap{display:inline-flex;gap:4px;min-width:max-content}
+.month-day-col{display:flex;flex-direction:column;align-items:center;gap:3px;width:30px}
+.month-day-num{font-size:9px;font-weight:500;color:var(--text3);line-height:1}
+.month-day-dow{font-size:8px;color:var(--text3);opacity:.7;line-height:1;text-transform:uppercase}
+.month-dot{width:28px;height:28px;border-radius:7px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:white;transition:all .12s;flex-shrink:0}
+.month-dot.done{border-color:transparent;transform:scale(1.06)}
+.month-dot.future{opacity:.2;cursor:default;pointer-events:none}
+.month-dot.today-hl:not(.done){border:1.5px solid var(--accent)}
+.month-day-col.today-col .month-day-num{color:var(--accent);font-weight:700}
+.month-day-col.today-col .month-day-dow{color:var(--accent);opacity:1}
+
+/* ── EDIT MODAL ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;padding:16px}
+.modal-overlay.open{display:flex}
+.modal{background:var(--surface);border-radius:var(--radius);padding:24px;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.modal h2{font-family:var(--serif);font-size:22px;font-style:italic;margin-bottom:16px;color:var(--text)}
+.edit-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)}
+.edit-row:last-child{border-bottom:none}
+.edit-icon-btn{font-size:20px;width:34px;height:34px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s}
+.edit-icon-btn:hover{background:var(--border)}
+.edit-input{flex:1;padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:var(--sans);font-size:13px;outline:none}
+.edit-input:focus{border-color:var(--accent)}
+.del-btn{width:28px;height:28px;border-radius:6px;border:none;background:none;cursor:pointer;color:var(--text3);font-size:16px;display:flex;align-items:center;justify-content:center;transition:background .2s;flex-shrink:0}
+.del-btn:hover{background:#fee2e2;color:#dc2626}
+.add-row{display:flex;gap:8px;margin-top:12px;align-items:center}
+.add-input{flex:1;padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:var(--sans);font-size:13px;outline:none}
+.add-input:focus{border-color:var(--accent)}
+.modal-footer{display:flex;gap:8px;margin-top:16px;justify-content:flex-end}
+.btn{padding:9px 18px;border-radius:10px;border:none;cursor:pointer;font-family:var(--sans);font-size:13px;font-weight:500;transition:opacity .2s}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-secondary{background:var(--surface2);color:var(--text)}
+.btn:hover{opacity:.85}
+.btn:disabled{opacity:.5;cursor:default}
+.ai-badge{font-size:10px;background:var(--accent);color:#fff;padding:2px 6px;border-radius:4px;margin-left:6px;opacity:.8}
+
+/* ── EMOJI PICKER ── */
+.emoji-picker{position:absolute;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.15);padding:10px;z-index:2000;display:none;width:220px;flex-wrap:wrap;gap:2px}
+.emoji-picker.open{display:flex}
+.ep-emoji{font-size:22px;width:36px;height:36px;border-radius:8px;border:none;background:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s}
+.ep-emoji:hover{background:var(--surface2)}
+
+#confetti-canvas{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+@media(max-width:480px){
+  .stats-row{grid-template-columns:repeat(2,1fr)}
+  .stat-num{font-size:20px}
+  .dot-btn{width:32px;height:32px}
+  .auth-card{padding:28px 20px}
+}
+
+/* ═══════════════ ✨ DISNEY MAGIC ═══════════════ */
+body.magic-cursor *, body.magic-cursor{cursor:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><text x='0' y='24' font-size='24'>🪄</text></svg>") 4 4, auto}
+.spark{position:fixed;pointer-events:none;width:8px;height:8px;border-radius:50%;background:radial-gradient(circle,#FFF4D0 0%,#FFD060 50%,transparent 70%);z-index:9999;animation:sparkFade 1s ease-out forwards}
+@keyframes sparkFade{0%{transform:translate(-50%,-50%) scale(1);opacity:1}100%{transform:translate(-50%,calc(-50% + 30px)) scale(0.2);opacity:0}}
+/* magic-fade удалён */
+.dot-btn:not(.future):not(.done):hover{box-shadow:0 0 12px rgba(255,208,96,0.6),0 0 24px rgba(255,208,96,0.3)}
+.dot-btn.done:hover{box-shadow:0 0 16px currentColor,0 0 28px rgba(255,255,255,0.3);filter:brightness(1.1)}
+.habit-card-week:hover,.habit-card-month:hover{box-shadow:0 6px 24px rgba(127,119,221,0.18),0 2px 8px rgba(0,0,0,0.06);transform:translateY(-1px);transition:all .3s ease}
+.stat:hover{box-shadow:0 4px 18px rgba(255,208,96,0.25);transform:translateY(-2px);transition:all .3s ease}
+.app-title{position:relative;display:inline-block}
+.app-title::after{content:'✨';position:absolute;top:-8px;right:-18px;font-size:14px;animation:titleSparkle 2.5s ease-in-out infinite;pointer-events:none}
+@keyframes titleSparkle{0%,100%{transform:scale(1) rotate(0deg);opacity:0.6}50%{transform:scale(1.3) rotate(20deg);opacity:1}}
+.quote-box{position:relative;overflow:hidden}
+.quote-box::before{content:'';position:absolute;top:0;left:-100%;width:60%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.25),transparent);animation:quoteSweep 6s ease-in-out infinite;pointer-events:none}
+@keyframes quoteSweep{0%,80%{left:-60%}90%{left:100%}100%{left:100%}}
+body.dark .night-stars{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;opacity:1}
+body:not(.dark) .night-stars{display:none}
+.night-star{position:absolute;background:#FFF;border-radius:50%;animation:twinkle 3s ease-in-out infinite}
+@keyframes twinkle{0%,100%{opacity:0.15;transform:scale(0.8)}50%{opacity:0.9;transform:scale(1.2)}}
+.pixie-dust{position:fixed;top:50%;left:50%;width:0;height:0;pointer-events:none;z-index:9998}
+.pixie-particle{position:absolute;width:6px;height:6px;border-radius:50%;background:radial-gradient(circle,#FFF4D0 0%,#FFD060 40%,#FF9F1C 80%,transparent);animation:pixieFly 1.8s cubic-bezier(0.16,1,0.3,1) forwards}
+@keyframes pixieFly{0%{transform:translate(0,0) scale(0);opacity:0}10%{opacity:1;transform:translate(0,0) scale(1.2)}100%{transform:translate(var(--px),var(--py)) scale(0);opacity:0}}
+.magic-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:10000;pointer-events:none}
+.magic-overlay.show{display:flex;animation:overlayPulse 2s ease-out}
+.magic-text{font-size:48px;font-weight:800;background:linear-gradient(135deg,#FFD060,#FF9F1C,#D4537E,#7F77DD);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-shadow:0 0 40px rgba(255,208,96,0.6);animation:magicGlow 2s ease-out;text-align:center;padding:0 20px}
+@keyframes overlayPulse{0%{backdrop-filter:blur(0)}30%{backdrop-filter:blur(2px)}100%{backdrop-filter:blur(0)}}
+@keyframes magicGlow{0%{transform:scale(0.3) rotate(-10deg);opacity:0}25%{transform:scale(1.1) rotate(2deg);opacity:1}50%{transform:scale(1) rotate(0)}100%{transform:scale(1.4);opacity:0}}
+</style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+<canvas id="confetti-canvas"></canvas>
+
+<!-- AUTH SCREEN -->
+<div id="auth-screen" class="auth-screen" style="display:none">
+  <div class="auth-card">
+    <div class="auth-logo">Привычки</div>
+    <div class="auth-sub">Трекер для тех, кто растёт каждый день</div>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchAuthTab('magic')">Magic Link</button>
+      <button class="auth-tab" onclick="switchAuthTab('google')">Google</button>
+    </div>
+
+    <div id="auth-magic-panel">
+      <div id="auth-form-area">
+        <input class="auth-input" id="auth-email" type="email" placeholder="Ваш email"
+          onkeydown="if(event.key==='Enter')sendMagicLink()">
+        <button class="auth-btn" id="magic-btn" onclick="sendMagicLink()">Отправить ссылку для входа</button>
+      </div>
+      <div id="auth-magic-sent" class="magic-sent" style="display:none">
+        <div class="big-emoji">✉️</div>
+        <p>Письмо отправлено на<br><span class="email-highlight" id="sent-email-display"></span></p>
+        <p style="margin-top:8px;font-size:12px;color:var(--text3)">Кликни на ссылку в письме — и готово</p>
+      </div>
+      <div class="auth-msg" id="magic-msg"></div>
+    </div>
+
+    <div id="auth-google-panel" style="display:none">
+      <button class="google-btn" onclick="signInWithGoogle()">
+        <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z"/></svg>
+        Войти через Google
+      </button>
+      <div class="auth-msg" id="google-msg"></div>
+    </div>
+
+    <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border)">
+      <p style="font-size:12px;color:var(--text3);margin-bottom:12px">Хочешь сначала посмотреть?</p>
+      <button class="google-btn" onclick="enterDemo()" style="border-color:var(--accent);color:var(--accent)">
+        <span style="font-size:18px">👁</span>
+        Демо-режим (без регистрации)
+      </button>
+      <p style="font-size:11px;color:var(--text3);margin-top:8px">Данные не сохраняются между сессиями</p>
+    </div>
+  </div>
+</div>
+
+<!-- EMOJI PICKER -->
+<div class="emoji-picker" id="emoji-picker"></div>
+
+<!-- EDIT MODAL -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <h2>Редактировать привычки</h2>
+    <div id="habit-editor"></div>
+    <div class="add-row">
+      <input class="add-input" id="new-habit-input" placeholder="Название новой привычки..."
+        maxlength="30" onkeydown="if(event.key==='Enter')addHabit()">
+      <button class="btn btn-primary" id="add-habit-btn" onclick="addHabit()">+ Добавить</button>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Отмена</button>
+      <button class="btn btn-primary" onclick="saveHabits()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- DEMO BANNER -->
+<div id="demo-banner" class="demo-banner" style="display:none">
+  <span>👁 Демо-режим — данные не сохраняются</span>
+  <button onclick="showScreen('auth');isDemoMode=false;document.getElementById('demo-banner').style.display='none'">Войти</button>
+</div>
+
+<!-- MAIN APP -->
+<div id="main-app" class="app" style="display:none">
+  <div class="header">
+    <div class="header-left">
+      <h1>Трекер привычек</h1>
+      <div class="date-sub" id="date-sub"></div>
+      <div id="sync-status" style="font-size:11px;min-height:14px;color:var(--text3);margin-top:3px;opacity:0;transition:opacity 0.3s"></div>
+    </div>
+    <div class="header-btns">
+      <button class="icon-btn" id="edit-btn" onclick="openModal()" title="Редактировать привычки">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+          <path d="M15 5l3 3"/>
+        </svg>
+      </button>
+      <button class="icon-btn" id="theme-btn" onclick="toggleTheme()">🌙</button>
+      <div class="user-avatar" id="user-avatar" onclick="toggleUserMenu(event)">
+        <div class="user-menu" id="user-menu">
+          <div class="user-email" id="user-email-display"></div>
+          <label class="user-menu-item" style="cursor:pointer;display:flex;align-items:center;gap:8px">
+            📷 Сменить фото
+            <input type="file" id="avatar-upload" accept="image/*" style="display:none" onchange="uploadAvatar(event)">
+          </label>
+          <button class="user-menu-item" id="signout-btn" style="width:100%;text-align:left;border:none;background:none;cursor:pointer;font-family:var(--sans)">🚪 Выйти</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="quote-card" onclick="nextQuote()">
+    <div class="quote-text" id="quote-text"></div>
+    <div class="quote-author" id="quote-author"></div>
+
+  </div>
+
+  <div class="stats-row" id="stats-row"></div>
+
+  <div class="nav">
+    <button class="nav-btn" id="btn-prev" onclick="navigate(-1)">←</button>
+    <span class="nav-title" id="nav-title"></span>
+    <button class="nav-btn" id="btn-next" onclick="navigate(1)">→</button>
+    <div class="view-toggle">
+      <button class="view-btn" id="btn-week" onclick="setView('week')">Нед.</button>
+      <button class="view-btn" id="btn-month" onclick="setView('month')">Мес.</button>
+    </div>
+  </div>
+
+  <div id="week-header" class="week-grid-header" style="display:none"></div>
+  <div class="habits-list" id="habits-list"></div>
+  <div style="text-align:center;margin-top:32px;padding-bottom:8px;font-size:12px;color:var(--text3);letter-spacing:0.04em">@is_laforge</div>
+</div>
+
+<script>
+// ── DEMO MODE ─────────────────────────────────────────────────────────────
+let isDemoMode = false;
+
+function enterDemo(){
+  isDemoMode = true;
+  currentUser = null;
+  data = {};
+  HABITS = DEFAULT_HABITS;
+  document.getElementById('demo-banner').style.display = 'flex';
+  // Set demo avatar
+  const av = document.getElementById('user-avatar');
+  const menu = document.getElementById('user-menu');
+  Array.from(av.childNodes).forEach(n=>{ if(n.nodeType===3) av.removeChild(n); });
+  av.insertBefore(document.createTextNode('👁'), menu);
+  av.style.backgroundImage = '';
+  av.style.fontSize = '18px';
+  document.getElementById('user-email-display').textContent = 'Демо-режим';
+  showScreen('app');
+  render();
+  setSyncStatus('демо — данные не сохраняются', false);
+}
+
+// ── SUPABASE ──────────────────────────────────────────────────────────────
+const SB_URL = 'https://bjqcjktdbjgmwxcddppq.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJqcWNqa3RkYmpnbXd4Y2RkcHBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5NjQ1NjMsImV4cCI6MjA5NTU0MDU2M30.-UhLFmQcuV5WutkzA5B0cTqedTa86gm-oX8VxEsqwwQ';
+const sb = supabase.createClient(SB_URL, SB_KEY);
+
+let currentUser = null;
+
+// ── AUTH ──────────────────────────────────────────────────────────────────
+function switchAuthTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach((t,i)=>t.classList.toggle('active',
+    (i===0&&tab==='magic')||(i===1&&tab==='google')));
+  document.getElementById('auth-magic-panel').style.display = tab==='magic'?'':'none';
+  document.getElementById('auth-google-panel').style.display = tab==='google'?'':'none';
+}
+
+async function sendMagicLink() {
+  const email = document.getElementById('auth-email').value.trim();
+  if(!email){ setAuthMsg('magic','Введите email','error'); return; }
+  const btn = document.getElementById('magic-btn');
+  btn.disabled = true; btn.textContent = 'Отправляем...';
+  setAuthMsg('magic','');
+  const {error} = await sb.auth.signInWithOtp({
+    email,
+    options:{ emailRedirectTo: window.location.origin + window.location.pathname }
+  });
+  btn.disabled = false; btn.textContent = 'Отправить ссылку для входа';
+  if(error){ setAuthMsg('magic', error.message, 'error'); return; }
+  document.getElementById('sent-email-display').textContent = email;
+  document.getElementById('auth-form-area').style.display = 'none';
+  document.getElementById('auth-magic-sent').style.display = 'block';
+}
+
+async function signInWithGoogle() {
+  setAuthMsg('google','');
+  const {error} = await sb.auth.signInWithOAuth({
+    provider:'google',
+    options:{ redirectTo: window.location.origin + window.location.pathname }
+  });
+  if(error) setAuthMsg('google', error.message, 'error');
+}
+
+async function signOut() {
+  console.log('signOut called');
+  document.getElementById('user-menu').classList.remove('open');
+  setSyncStatus('выход...');
+  const {error} = await sb.auth.signOut();
+  console.log('signOut result:', error);
+  currentUser = null;
+  data = {};
+  // Clear cached data
+  Object.keys(localStorage).forEach(k=>{ if(k.startsWith('ht_')) localStorage.removeItem(k); });
+  if(realtimeChannel){ sb.removeChannel(realtimeChannel); realtimeChannel=null; }
+  // Clear URL hash
+  history.replaceState(null, '', window.location.pathname);
+  // Reset auth form
+  const fa = document.getElementById('auth-form-area');
+  const ms = document.getElementById('auth-magic-sent');
+  if(fa) fa.style.display = '';
+  if(ms) ms.style.display = 'none';
+  const mb = document.getElementById('magic-btn');
+  if(mb){ mb.disabled=false; mb.textContent='Отправить ссылку для входа'; }
+  showScreen('auth');
+}
+
+function setAuthMsg(type, msg, cls=''){
+  const el = document.getElementById(type+'-msg');
+  if(el){ el.textContent=msg; el.className='auth-msg'+(cls?' '+cls:''); }
+}
+
+function toggleUserMenu(e){
+  if(e) e.stopPropagation();
+  document.getElementById('user-menu').classList.toggle('open');
+}
+document.addEventListener('click', e=>{
+  if(!e.target.closest('#user-avatar')) document.getElementById('user-menu').classList.remove('open');
+});
+// Wire signout button separately — no bubbling issues
+document.addEventListener('DOMContentLoaded', ()=>{
+  const btn = document.getElementById('signout-btn');
+  if(btn) btn.addEventListener('click', e=>{ e.stopPropagation(); signOut(); });
+});
+
+function showScreen(name){
+  document.getElementById('auth-screen').style.display = name==='auth' ? 'flex' : 'none';
+  document.getElementById('main-app').style.display = name==='app' ? 'block' : 'none';
+}
+
+function initUserUI(user){
+  currentUser = user;
+  const initials = (user.email||'?')[0].toUpperCase();
+  const av = document.getElementById('user-avatar');
+  av.childNodes[0].nodeType===3 ? av.insertAdjacentText('afterbegin',initials) : null;
+  av.querySelector('.user-menu').before(document.createTextNode(initials));
+  // set avatar letter
+  const menu = document.getElementById('user-menu');
+  const txt = av.childNodes[0];
+  if(txt && txt.nodeType===3) av.removeChild(txt);
+  av.insertBefore(document.createTextNode(initials), menu);
+  document.getElementById('user-email-display').textContent = user.email || '';
+}
+
+// ── DATA ──────────────────────────────────────────────────────────────────
+const DEFAULT_HABITS = [
+  {name:'Медитация',         icon:'🧘',  color:'#7F77DD', bg:'#EEEDFE'},
+  {name:'Благодарность',     icon:'🌼',  color:'#1D9E75', bg:'#E1F5EE'},
+  {name:'Чтение',            icon:'📖',  color:'#D4537E', bg:'#FBEAF0'},
+  {name:'Воркаут',           icon:'🏋️‍♂️', color:'#378ADD', bg:'#E6F1FB'},
+  {name:'Иностранный язык',  icon:'📚',  color:'#D85A30', bg:'#FAECE7'},
+  {name:'8000 шагов',        icon:'🏃',  color:'#0F6E56', bg:'#E1F5EE'},
+  {name:'Стретчинг',         icon:'🤸',  color:'#BA7517', bg:'#FAEEDA'},
+  {name:'Дневник',           icon:'📓',  color:'#4338CA', bg:'#EEF2FF'},
+  {name:'Режим сна',         icon:'🛌',  color:'#639922', bg:'#EAF3DE'},
+];
+const COLOR_POOL=['#7F77DD','#1D9E75','#D85A30','#378ADD','#639922','#BA7517','#D4537E','#0F6E56','#C2410C','#4338CA'];
+const BG_POOL   =['#EEEDFE','#E1F5EE','#FAECE7','#E6F1FB','#EAF3DE','#FAEEDA','#FBEAF0','#E1F5EE','#FEF3C7','#EEF2FF'];
+const EMOJI_POOL=['🧘','🏋️','🤸','📖','🚶','🤖','🇬🇧','💧','🗣️','🌙','🎯','💊','🧠','✍️','🎸','🏃','🥗','☕','📝','⚡','🔥','🎵','🧹','💻','🏊','🚴','🌿','🧘‍♂️','🍎','🛏️','📚','🎨','🏆','💪','🧬','🫁','🫀','🌅','🥋','🧗'];
+
+let HABITS = [...DEFAULT_HABITS];
+let data = {};
+let editBuffer = [];
+let activeEmojiIdx = null;
+
+// ── AI EMOJI ──────────────────────────────────────────────────────────────
+const EMOJI_MAP = [
+  {words:['медитац','дыхан','mindful','релакс'],emoji:'🧘'},
+  {words:['трениров','воркаут','качал','спортзал','gym'],emoji:'🏋️'},
+  {words:['стретч','растяж','йога'],emoji:'🤸'},
+  {words:['чтен','книг','читать','read'],emoji:'📖'},
+  {words:['шаг','ходьб','прогулк','walk'],emoji:'🚶'},
+  {words:['бег','пробежк','run'],emoji:'🏃'},
+  {words:['ai','ии','нейрос','gpt','машин','модел'],emoji:'🤖'},
+  {words:['английск','язык','spanish','french','немецк'],emoji:'🌍'},
+  {words:['вода','воды','гидрац','water','пить'],emoji:'💧'},
+  {words:['креатин','витамин','таблетк','препарат','добавк'],emoji:'💊'},
+  {words:['сон','спать','sleep','полноч','засыпа'],emoji:'🛏️'},
+  {words:['артикуляц','речь','голос','дикц'],emoji:'🗣️'},
+  {words:['музык','гитар','фортепиан','пианин','drum'],emoji:'🎵'},
+  {words:['кофе','coffee','чай','tea'],emoji:'☕'},
+  {words:['еда','питан','диет','калор','food'],emoji:'🥗'},
+  {words:['код','програм','разработк','code'],emoji:'💻'},
+  {words:['рисов','творч','art','sketch'],emoji:'🎨'},
+  {words:['плаван','бассейн','swim'],emoji:'🏊'},
+  {words:['велосипед','велик','bike','cycling'],emoji:'🚴'},
+  {words:['уборк','чист','убирать'],emoji:'🧹'},
+  {words:['дневник','журнал','запис','journal'],emoji:'✍️'},
+  {words:['природ','парк','лес','green'],emoji:'🌿'},
+  {words:['утро','рассвет','подъём'],emoji:'🌅'},
+  {words:['борьб','бокс','martial','единоборств','каратэ'],emoji:'🥋'},
+];
+
+function guessEmoji(name) {
+  const lower = name.toLowerCase();
+  for(const {words, emoji} of EMOJI_MAP){
+    if(words.some(w => lower.includes(w))) return emoji;
+  }
+  return EMOJI_POOL[Math.floor(Math.random() * EMOJI_POOL.length)];
+}
+
+// ── EMOJI PICKER ──────────────────────────────────────────────────────────
+function buildEmojiPicker(){
+  const p = document.getElementById('emoji-picker');
+  p.innerHTML = EMOJI_POOL.map(e =>
+    '<button class="ep-emoji" onclick="pickEmoji(\''+e+'\')" title="'+e+'">'+e+'</button>'
+  ).join('');
+}
+
+function openEmojiPicker(idx, btnEl){
+  if(activeEmojiIdx === idx){
+    closeEmojiPicker(); return;
+  }
+  activeEmojiIdx = idx;
+  const p = document.getElementById('emoji-picker');
+  p.classList.add('open');
+  const rect = btnEl.getBoundingClientRect();
+  p.style.left = rect.left+'px';
+  p.style.top = (rect.bottom+6+window.scrollY)+'px';
+}
+
+function closeEmojiPicker(){
+  activeEmojiIdx = null;
+  document.getElementById('emoji-picker').classList.remove('open');
+}
+
+function pickEmoji(emoji){
+  if(activeEmojiIdx === null) return;
+  editBuffer[activeEmojiIdx].icon = emoji;
+  closeEmojiPicker();
+  renderEditor();
+}
+
+document.addEventListener('click', e=>{
+  if(!e.target.closest('#emoji-picker') && !e.target.closest('.edit-icon-btn'))
+    closeEmojiPicker();
+});
+
+// ── SUPABASE HABITS CRUD ──────────────────────────────────────────────────
+function setSyncStatus(msg, ok){
+  const el=document.getElementById('sync-status');
+  if(!el) return;
+  // Always keep text (to hold height), just fade opacity
+  el.textContent = msg || ' ';
+  el.style.color = ok ? 'var(--accent)' : 'var(--text3)';
+  el.style.opacity = msg ? '1' : '0';
+}
+
+function dkey(y,m,d,hi){ return y+'/'+m+'/'+d+'/'+hi; }
+
+function cacheKey(){ return 'ht_'+((currentUser&&currentUser.id)||'anon'); }
+
+// Fetch with timeout to avoid infinite hang
+async function sbFetchWithTimeout(fn, ms=8000){
+  return Promise.race([
+    fn(),
+    new Promise((_,reject)=>setTimeout(()=>reject(new Error('timeout')), ms))
+  ]);
+}
+
+async function loadData(){
+  if(!currentUser || isDemoMode) return;
+  // Show cached data instantly
+  try{ const cached=localStorage.getItem(cacheKey()); if(cached){ data=JSON.parse(cached); render(); } }catch(e){}
+  setSyncStatus('синхронизация...');
+  try{
+    // Load habit list first
+    try{
+      const settingsRes = await sbFetchWithTimeout(()=>
+        sb.from('user_settings').select('value').eq('user_id', currentUser.id).eq('key','habits').maybeSingle()
+      );
+      if(settingsRes.data && settingsRes.data.value){
+        const serverHabits = JSON.parse(settingsRes.data.value);
+        HABITS = serverHabits;
+        localStorage.setItem('customHabits', JSON.stringify(HABITS));
+      }
+    }catch(e){ console.warn('settings load skipped:', e.message); }
+
+    // Load checkbox data
+    const res = await sbFetchWithTimeout(()=>
+      sb.from('habits').select('id,done').eq('user_id', currentUser.id)
+    );
+    if(res.error){ setSyncStatus('ошибка: '+res.error.message, false); return; }
+    (res.data||[]).forEach(r=>{ if(typeof r.done==='boolean') data[r.id]=r.done; });
+    localStorage.setItem(cacheKey(), JSON.stringify(data));
+    setSyncStatus('синхронизировано ✓', true);
+    render();
+  }catch(e){
+    setSyncStatus(e.message==='timeout'?'таймаут — используем кэш':'нет сети', false);
+  }
+}
+
+async function saveEntry(k, val){
+  if(!currentUser || isDemoMode) return;
+  // Save locally first — instant feedback
+  localStorage.setItem(cacheKey(), JSON.stringify(data));
+  setSyncStatus('сохранение...');
+  try{
+    const res = await sbFetchWithTimeout(()=>
+      sb.from('habits').upsert(
+        {id:k, user_id:currentUser.id, done:val, updated_at:new Date().toISOString()},
+        {onConflict:'id,user_id'}
+      )
+    );
+    if(res.error){ setSyncStatus('ошибка: '+res.error.message, false); return; }
+    setSyncStatus('сохранено ✓', true);
+    setTimeout(()=>setSyncStatus('',false), 2000);
+  }catch(e){
+    setSyncStatus('сохранено локально', false);
+  }
+}
+
+// Realtime: push changes from other devices instantly
+let realtimeChannel = null;
+function subscribeRealtime(){
+  if(realtimeChannel) sb.removeChannel(realtimeChannel);
+  realtimeChannel = sb.channel('habits_changes')
+    .on('postgres_changes',
+      {event:'*', schema:'public', table:'habits', filter:'user_id=eq.'+currentUser.id},
+      payload=>{
+        const r = payload.new || payload.old;
+        if(!r) return;
+        if(payload.eventType === 'DELETE') delete data[r.id];
+        else if(typeof r.done === 'boolean') data[r.id] = r.done;
+        localStorage.setItem(cacheKey(), JSON.stringify(data));
+        setSyncStatus('обновлено ✓', true);
+        render();
+        setTimeout(()=>setSyncStatus('',false), 2000);
+      }
+    )
+    .subscribe(status=>console.log('Realtime:', status));
+}
+
+// ── THEME ─────────────────────────────────────────────────────────────────
+let isDark = false;
+function toggleTheme(){
+  isDark=!isDark;
+  document.documentElement.setAttribute('data-theme',isDark?'dark':'light');
+  document.getElementById('theme-btn').textContent=isDark?'☀️':'🌙';
+  localStorage.setItem('theme',isDark?'dark':'light');
+}
+
+// ── NAVIGATION ────────────────────────────────────────────────────────────
+let view='week', offset=0;
+const today=new Date();
+const ty=today.getFullYear(), tm=today.getMonth(), td=today.getDate();
+const DOW=['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
+const MON_S=['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+const MON_F=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+
+function setView(v){ view=v; offset=0; localStorage.setItem('view',v); render(); }
+function navigate(d){ offset+=d; render(); }
+function getDIM(y,m){ return new Date(y,m+1,0).getDate(); }
+
+function getViewDays(){
+  if(view==='week'){
+    const base=new Date(ty,tm,td); base.setDate(base.getDate()+offset*7);
+    const mon=new Date(base); const dow=mon.getDay()||7; mon.setDate(mon.getDate()-dow+1);
+    return Array.from({length:7},(_,i)=>{ const d=new Date(mon); d.setDate(d.getDate()+i); return {y:d.getFullYear(),m:d.getMonth(),d:d.getDate(),date:d}; });
+  }
+  const base=new Date(ty,tm+offset,1); const y=base.getFullYear(),m=base.getMonth();
+  return Array.from({length:getDIM(y,m)},(_,i)=>{ const date=new Date(y,m,i+1); return {y,m,d:i+1,date}; });
+}
+
+function isToday(day){ return day.y===ty&&day.m===tm&&day.d===td; }
+function isFuture(day){ return new Date(day.y,day.m,day.d)>new Date(ty,tm,td); }
+
+function navTitle(days){
+  if(view==='week'){ const f=days[0],l=days[6]; return f.m===l.m?f.d+'–'+l.d+' '+MON_F[f.m]:f.d+' '+MON_F[f.m].slice(0,3)+' – '+l.d+' '+MON_F[l.m].slice(0,3); }
+  const b=new Date(ty,tm+offset,1); return MON_F[b.getMonth()]+' '+b.getFullYear();
+}
+
+// ── STATS ─────────────────────────────────────────────────────────────────
+function getStreak(hi){
+  let streak = 0;
+  let cur = new Date(ty, tm, td);
+  // If today not marked, start counting from yesterday
+  const todayKey = dkey(cur.getFullYear(), cur.getMonth(), cur.getDate(), hi);
+  if(!data[todayKey]) cur.setDate(cur.getDate() - 1);
+  for(let i = 0; i < 366; i++){
+    const k = dkey(cur.getFullYear(), cur.getMonth(), cur.getDate(), hi);
+    if(data[k]) { streak++; cur.setDate(cur.getDate() - 1); }
+    else break;
+  }
+  return streak;
+}
+function getMonthPct(hi){ let done=0; for(let i=1;i<=td;i++) if(data[dkey(ty,tm,i,hi)]) done++; return td?Math.round(done/td*100):0; }
+function checkAllDone(days){ const t=days.find(d=>isToday(d)); return t?HABITS.every((_,hi)=>data[dkey(t.y,t.m,t.d,hi)]):false; }
+
+function renderStats(days){
+  let done=0,total=0,bestStreak=0,perfectDays=0;
+  days.filter(d=>!isFuture(d)).forEach(day=>{
+    let allDone=true;
+    HABITS.forEach((_,hi)=>{ if(data[dkey(day.y,day.m,day.d,hi)])done++; else allDone=false; total++; });
+    if(allDone) perfectDays++;
+  });
+  HABITS.forEach((_,hi)=>{ const s=getStreak(hi); if(s>bestStreak)bestStreak=s; });
+  const pct=total?Math.round(done/total*100):0;
+  const accentColor = '#GRAPHITE';
+  let fire;
+  if(FLAME_MODE === 'A') fire = flameVariantA(accentColor);
+  else if(FLAME_MODE === 'B') fire = flameVariantB(accentColor);
+  else fire = flameVariantA(accentColor) + flameVariantB(accentColor);
+  document.getElementById('stats-row').innerHTML=[
+    {num:done,label:'Выполнено'},{num:pct+'%',label:'Процент'},
+    {num:bestStreak+(bestStreak?' '+fire:''),label:'Серия'},{num:perfectDays,label:'Идеальных'}
+  ].map(s=>'<div class="stat"><div class="stat-num">'+s.num+'</div><div class="stat-label">'+s.label+'</div></div>').join('');
+}
+
+// ── TOGGLE ────────────────────────────────────────────────────────────────
+function toggle(y,m,d,hi){
+  const k=dkey(y,m,d,hi); data[k]=!data[k];
+  saveEntry(k,data[k]);
+  // Сохраняем И вертикальный скролл страницы, И горизонтальный скролл всех .month-scroll
+  const sy = window.scrollY;
+  const monthScrolls = Array.from(document.querySelectorAll('.month-scroll')).map(el => el.scrollLeft);
+  render();
+  requestAnimationFrame(()=>{
+    window.scrollTo(0, sy);
+    document.querySelectorAll('.month-scroll').forEach((el, i) => {
+      if(monthScrolls[i] !== undefined) el.scrollLeft = monthScrolls[i];
+    });
+  });
+  // 1 чекбокс = 1 анимация: 50/50 рандом конфетти или фейерверк
+  if(data[k]) (Math.random() > 0.5 ? launchConfetti(false) : launchFireworks());
+}
+
+// ── STREAK LABEL ─────────────────────────────────────────────────────────
+// Map hex color to hue-rotate degrees for fire emoji
+function colorToHueRotate(hex){
+  if(!hex) return 190;
+  const r=parseInt(hex.slice(1,3),16)/255, g=parseInt(hex.slice(3,5),16)/255, b=parseInt(hex.slice(5,7),16)/255;
+  const max=Math.max(r,g,b), min=Math.min(r,g,b), d=max-min;
+  if(d===0) return 190;
+  let h = max===r ? ((g-b)/d)%6 : max===g ? (b-r)/d+2 : (r-g)/d+4;
+  h = Math.round(h*60); if(h<0) h+=360;
+  return (h - 30 + 360) % 360;
+}
+
+// Вариант A: эмодзи 🔥 с цветовым фильтром (~85-90% точности к цвету привычки)
+function flameVariantA(color){
+  // Спец-случай: графитовая молния (для 'Лучшая серия')
+  if(color === '#GRAPHITE'){
+    return '<span style="display:inline-block;font-size:16px;line-height:1;'+
+      'filter:grayscale(1) brightness(0.55) contrast(1.1);'+
+      'transform:translateY(-1px)">⚡</span>';
+  }
+  const deg = colorToHueRotate(color);
+  return '<span style="display:inline-block;font-size:16px;line-height:1;'+
+    'filter:hue-rotate('+deg+'deg) saturate(2.2) brightness(1.05) '+
+    'drop-shadow(0 0 2px '+color+'88);'+
+    'transform:translateY(-1px)">🔥</span>';
+}
+
+// Вариант B: кастомный SVG-огонёк с градиентом (100% точность цвета привычки)
+function flameVariantB(color){
+  const lighten=(hex,p)=>{
+    const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+    const lr=Math.min(255,Math.round(r+(255-r)*p)), lg=Math.min(255,Math.round(g+(255-g)*p)), lb=Math.min(255,Math.round(b+(255-b)*p));
+    return '#'+[lr,lg,lb].map(x=>x.toString(16).padStart(2,'0')).join('');
+  };
+  const light=lighten(color,0.45), dark=color;
+  const gid='fg-'+color.slice(1);
+  return '<svg width="14" height="16" viewBox="0 0 14 16" style="display:inline-block;vertical-align:-3px;margin-right:2px;filter:drop-shadow(0 0 2px '+color+'66)">'+
+    '<defs><linearGradient id="'+gid+'" x1="0" y1="0" x2="0" y2="1">'+
+    '<stop offset="0%" stop-color="'+light+'"/>'+
+    '<stop offset="100%" stop-color="'+dark+'"/>'+
+    '</linearGradient></defs>'+
+    '<path d="M7 0.5 C 5 3, 3 4.5, 3 7.5 C 3 9.5, 4 10.5, 4 12 C 4 11, 4.8 10.2, 5.5 10.2 C 5.5 11.5, 5 12.5, 5 13.5 C 5 14.8, 6 15.5, 7 15.5 C 8 15.5, 9 14.8, 9 13.5 C 9 12.5, 8.5 11.5, 8.5 10.2 C 9.2 10.2, 10 11, 10 12 C 10 10.5, 11 9.5, 11 7.5 C 11 4.5, 9 3, 7 0.5 Z" fill="url(#'+gid+')"/>'+
+    '</svg>';
+}
+
+// ─── ВЫБОР ВАРИАНТА ОГОНЬКА ───
+// 'A'    = эмодзи с фильтром (живой, цвет ~85-90%)
+// 'B'    = SVG-градиент (точный цвет 100%, более "плоский")
+// 'BOTH' = оба рядом для сравнения — выбери и напиши Suzuki какой оставить
+const FLAME_MODE = 'A';
+
+function streakLabel(s, color){
+  if(!s || s < 1) return '';
+  const n = Math.floor(s);
+  const suffix = n === 1 ? 'день' : n >= 2 && n <= 4 ? 'дня' : 'дней';
+  let flame;
+  if(FLAME_MODE === 'A') flame = flameVariantA(color);
+  else if(FLAME_MODE === 'B') flame = flameVariantB(color);
+  else flame = flameVariantA(color) + flameVariantB(color);
+  return flame + ' ' + n + ' ' + suffix;
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────
+function render(){
+  const days=getViewDays();
+  document.getElementById('nav-title').textContent=navTitle(days);
+  document.getElementById('btn-week').className='view-btn'+(view==='week'?' active':'');
+  document.getElementById('btn-month').className='view-btn'+(view==='month'?' active':'');
+  const DN=['Воскресенье','Понедельник','Вторник','Среда','Четверг','Пятница','Суббота'];
+  document.getElementById('date-sub').textContent=DN[today.getDay()]+', '+td+' '+MON_S[tm];
+  renderStats(days);
+  if(view==='week') renderWeek(days); else renderMonth(days);
+}
+
+function renderWeek(days){
+  const isMobile = window.innerWidth <= 600;
+  const hdr = document.getElementById('week-header');
+
+  if(isMobile){
+    hdr.style.display = 'none';
+    // Mobile: each card has its own 7-col grid header + dots
+    document.getElementById('habits-list').innerHTML = HABITS.map((h,hi)=>{
+      const streak=getStreak(hi), pct=getMonthPct(hi);
+      const cols = days.map(day=>{
+        const fut=isFuture(day), tod=isToday(day), done=!!data[dkey(day.y,day.m,day.d,hi)];
+        const oc = fut ? '' : 'onclick="toggle('+day.y+','+day.m+','+day.d+','+hi+')"';
+        const ac = tod ? 'var(--accent)' : 'var(--text3)';
+        return '<div style="display:flex;flex-direction:column;align-items:center;gap:3px">'+
+          '<div style="font-size:10px;font-weight:'+(tod?600:400)+';color:'+ac+'">'+day.d+'</div>'+
+          '<div style="font-size:8px;color:'+ac+';text-transform:uppercase;opacity:.8">'+DOW[day.date.getDay()]+'</div>'+
+          '<div class="dot-btn'+(done?' done':'')+(fut?' future':'')+(tod&&!done?' today-hl':'')+
+            '" style="width:32px;height:32px;'+(done?'background:'+h.color:'')+'" '+oc+'>'+
+            (done?'✓':'')+
+          '</div>'+
+        '</div>';
+      }).join('');
+      return '<div class="habit-card-week">'+
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'+
+          '<div class="habit-icon" style="background:'+h.bg+';flex-shrink:0">'+h.icon+'</div>'+
+          '<div style="min-width:0">'+
+            '<div class="habit-name">'+h.name+'</div>'+
+            (streak>=1?'<div class="habit-meta">'+streakLabel(streak,h.color)+'</div>':'')+
+          '</div>'+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">'+cols+'</div>'+
+        '<div class="progress-wrap">'+
+          '<div class="progress-bar"><div class="progress-fill" style="width:'+pct+'%;background:'+h.color+'"></div></div>'+
+          '<div class="progress-pct">'+pct+'%</div>'+
+        '</div>'+
+      '</div>';
+    }).join('');
+
+  } else {
+    // Desktop: shared header row + each card row use IDENTICAL grid
+    // Key: the header div and each card's inner grid both have 0 margin/padding offset
+    const COLS = 'minmax(140px, 180px) repeat(7,44px)';
+
+    // Render shared header
+    hdr.style.display = 'grid';
+    hdr.style.gridTemplateColumns = COLS;
+    hdr.style.gap = '12px';
+    hdr.style.padding = '0 14px';
+    hdr.style.margin = '0 0 2px 0';
+    hdr.innerHTML = '<div></div>' + days.map(day=>{
+      const t = isToday(day);
+      return '<div style="text-align:center">'+
+        '<div style="font-size:12px;font-weight:500;color:'+(t?'var(--accent)':'var(--text)')+'">'+ day.d +'</div>'+
+        '<div style="font-size:10px;color:'+(t?'var(--accent)':'var(--text3)')+';text-transform:uppercase;letter-spacing:.04em">'+DOW[day.date.getDay()]+'</div>'+
+      '</div>';
+    }).join('');
+
+    // Each habit card: its inner grid uses the SAME COLS
+    document.getElementById('habits-list').innerHTML = HABITS.map((h,hi)=>{
+      const streak=getStreak(hi), pct=getMonthPct(hi);
+      const dots = days.map(day=>{
+        const fut=isFuture(day), tod=isToday(day), done=!!data[dkey(day.y,day.m,day.d,hi)];
+        const oc = fut ? '' : 'onclick="toggle('+day.y+','+day.m+','+day.d+','+hi+')"';
+        return '<div style="display:flex;justify-content:center;align-items:center">'+
+          '<div class="dot-btn'+(done?' done':'')+(fut?' future':'')+(tod&&!done?' today-hl':'')+
+            '" style="'+(done?'background:'+h.color:'')+'" '+oc+'>'+
+            (done?'✓':'')+
+          '</div>'+
+        '</div>';
+      }).join('');
+      return '<div class="habit-card-week">'+
+        '<div style="display:grid;grid-template-columns:'+COLS+';column-gap:12px;row-gap:6px;align-items:center">'+
+          '<div style="display:flex;align-items:center;gap:8px;min-width:0">'+
+            '<div class="habit-icon" style="background:'+h.bg+';flex-shrink:0">'+h.icon+'</div>'+
+            '<div style="min-width:0">'+
+              '<div class="habit-name">'+h.name+'</div>'+
+              (streak>=1?'<div class="habit-meta">'+streakLabel(streak,h.color)+'</div>':'')+
+            '</div>'+
+          '</div>'+
+          dots+
+        '</div>'+
+        '<div class="progress-wrap">'+
+          '<div class="progress-bar"><div class="progress-fill" style="width:'+pct+'%;background:'+h.color+'"></div></div>'+
+          '<div class="progress-pct">'+pct+'%</div>'+
+        '</div>'+
+      '</div>';
+    }).join('');
+  }
+}
+
+function renderMonth(days){
+  document.getElementById('week-header').style.display='none';
+  document.getElementById('habits-list').innerHTML=HABITS.map((h,hi)=>{
+    const streak=getStreak(hi),pct=getMonthPct(hi);
+    const cols=days.map(day=>{
+      const fut=isFuture(day),tod=isToday(day),done=!!data[dkey(day.y,day.m,day.d,hi)];
+      const oc=fut?'':'onclick="toggle('+day.y+','+day.m+','+day.d+','+hi+')"';
+      return '<div class="month-day-col'+(tod?' today-col':'')+'">'+
+        '<div class="month-day-num">'+day.d+'</div><div class="month-day-dow">'+DOW[day.date.getDay()]+'</div>'+
+        '<div class="month-dot'+(done?' done':'')+(fut?' future':'')+(tod&&!done?' today-hl':'')+'" style="'+(done?'background:'+h.color:'')+'" '+oc+'>'+(done?'✓':'')+'</div></div>';
+    }).join('');
+    return '<div class="month-card"><div class="month-card-header">'+
+      '<div class="habit-icon" style="background:'+h.bg+'">'+h.icon+'</div>'+
+      '<div style="flex:1;min-width:0"><div class="habit-name">'+h.name+'</div>'+(streak>=1?'<div class="habit-meta">'+streakLabel(streak,h.color)+'</div>':'')+
+      '</div><span style="font-size:12px;color:var(--text3);flex-shrink:0">'+pct+'%</span></div>'+
+      '<div class="month-scroll"><div class="month-days-wrap">'+cols+'</div></div>'+
+      '<div class="progress-wrap" style="margin-top:8px"><div class="progress-bar"><div class="progress-fill" style="width:'+pct+'%;background:'+h.color+'"></div></div></div></div>';
+  }).join('');
+}
+
+// ── EDIT MODAL ────────────────────────────────────────────────────────────
+function openModal(){ editBuffer=HABITS.map(h=>Object.assign({},h)); renderEditor(); document.getElementById('edit-modal').classList.add('open'); }
+function closeModal(){ document.getElementById('edit-modal').classList.remove('open'); closeEmojiPicker(); }
+function renderEditor(){
+  document.getElementById('habit-editor').innerHTML=editBuffer.map((h,i)=>
+    '<div class="edit-row">'+
+      '<button class="edit-icon-btn" onclick="openEmojiPicker('+i+',this)" title="Выбрать эмодзи">'+h.icon+'</button>'+
+      '<input class="edit-input" value="'+h.name.replace(/"/g,'&quot;')+'" oninput="editBuffer['+i+'].name=this.value" maxlength="30">'+
+      '<button class="del-btn" onclick="removeHabit('+i+')">✕</button>'+
+    '</div>'
+  ).join('');
+}
+function removeHabit(i){ editBuffer.splice(i,1); renderEditor(); }
+
+async function addHabit(){
+  const inp=document.getElementById('new-habit-input');
+  const name=inp.value.trim(); if(!name) return;
+  const btn=document.getElementById('add-habit-btn');
+  btn.disabled=true; btn.textContent='Подбираю...';
+  const icon=guessEmoji(name);
+  const idx=editBuffer.length%COLOR_POOL.length;
+  editBuffer.push({name,icon,color:COLOR_POOL[idx],bg:BG_POOL[idx]});
+  inp.value=''; btn.disabled=false; btn.textContent='+ Добавить';
+  renderEditor();
+}
+
+async function saveHabits(){
+  HABITS=editBuffer.map(h=>Object.assign({},h));
+  localStorage.setItem('customHabits',JSON.stringify(HABITS));
+  closeModal(); render();
+  // Sync habit list to Supabase
+  if(currentUser && !isDemoMode){
+    try{
+      await sb.from('user_settings').upsert(
+        {user_id: currentUser.id, key:'habits', value: JSON.stringify(HABITS), updated_at: new Date().toISOString()},
+        {onConflict:'user_id,key'}
+      );
+      setSyncStatus('привычки сохранены ✓', true);
+      setTimeout(()=>setSyncStatus('',false), 2000);
+    }catch(e){ console.warn('habits save error', e); }
+  }
+}
+
+// ── QUOTES ────────────────────────────────────────────────────────────────
+const QUOTES=[
+  {text:'Мы — это то, что мы делаем постоянно. Совершенство — не действие, а привычка.',author:'Аристотель'},
+  {text:'Маленькие ежедневные улучшения — ключ к результатам, которые потрясают.',author:'Робин Шарма'},
+  {text:'Дисциплина — это мост между целями и достижениями.',author:'Джим Рон'},
+  {text:'Победи утро — победишь день.',author:'Робин Шарма'},
+  {text:'Не нужно быть великим, чтобы начать. Но нужно начать, чтобы стать великим.',author:'Зиг Зиглар'},
+  {text:'Каждый день — это новый шанс изменить свою жизнь.',author:''},
+  {text:'Успех — это сумма небольших усилий, повторяемых день за днём.',author:'Роберт Кольер'},
+  {text:'Тело достигает того, во что верит разум.',author:''},
+  {text:'Сначала ты формируешь привычки, потом привычки формируют тебя.',author:'Джон Дрейден'},
+  {text:'Мотивация заставляет начать. Привычка заставляет продолжать.',author:'Джим Рон'},
+  {text:'Путь в тысячу миль начинается с одного шага.',author:'Лао-цзы'},
+  {text:'Единственный способ делать великие дела — любить то, что делаешь.',author:'Стив Джобс'},
+  {text:'Не считай дни — сделай так, чтобы дни считались.',author:'Мухаммед Али'},
+  {text:'Каждое утро — это второй шанс.',author:''},
+  {text:'Лучший проект, над которым ты когда-либо будешь работать — это ты сам.',author:''},
+  {text:'Прогресс, а не совершенство.',author:''},
+  {text:'Здоровье — это не всё, но без здоровья всё — ничто.',author:'Артур Шопенгауэр'},
+  {text:'Инвестиции в знания приносят наибольший доход.',author:'Бенджамин Франклин'},
+  {text:'Медитация — это не уход от жизни, а её более глубокое проживание.',author:''},
+  {text:'Победитель — это просто мечтатель, который никогда не сдавался.',author:'Нельсон Мандела'},
+  {text:'Стань тем изменением, которое хочешь видеть в мире.',author:'Махатма Ганди'},
+  {text:'Твои привычки сегодня — это твоя биография завтра.',author:''},
+  {text:'Твоя сила больше, чем ты думаешь.',author:''},
+  {text:'Растяжка — это диалог с телом. Слушай его.',author:''},
+  {text:'Тот, кто двигается вперёд — уже впереди.',author:''},
+  {text:'Дисциплина — это выбор между тем, чего ты хочешь сейчас, и тем, чего хочешь больше всего.',author:''},
+  {text:'Привычки — это невидимая архитектура повседневной жизни.',author:'Гретхен Рубин'},
+  {text:'Каждое действие — это голос за того человека, которым ты хочешь стать.',author:'Джеймс Клир'},
+  {text:'Вы не поднимаетесь до уровня своих целей. Вы опускаетесь до уровня своих систем.',author:'Джеймс Клир'},
+  {text:'Небольшие привычки имеют большое значение. Это не вопрос скорости — это вопрос направления.',author:'Джеймс Клир'},
+  {text:'Человек есть то, что он делает.',author:'Сартр'},
+  {text:'Сосредоточься на том, что в твоей власти.',author:'Эпиктет'},
+  {text:'Самое сложное — начать. Всё остальное — вопрос терпения и постоянства.',author:''},
+  {text:'Великие дела состоят из маленьких, которые казались незначительными.',author:'Ван Гог'},
+  {text:'Твоё тело — это единственное место, где тебе суждено жить всю жизнь.',author:''},
+  {text:'Не ищи мотивацию. Создавай дисциплину.',author:''},
+  {text:'Лучше сделать и пожалеть, чем не сделать и пожалеть.',author:'Марк Твен'},
+  {text:'Настойчивость — не долгий забег. Это много коротких забегов, один за другим.',author:'Уолтер Эллиот'},
+  {text:'Каждый день, в котором ты не учишься чему-то новому — потерянный день.',author:'Чарли Мангер'},
+  {text:'Единственное, что стоит между тобой и твоей мечтой — это воля попробовать и вера в то, что это возможно.',author:'Джоэл Браун'},
+  {text:'Мозг — как мышца. Чем больше тренируешь, тем сильнее он становится.',author:''},
+  {text:'Спи хорошо, двигайся каждый день, ешь настоящую еду. Это не сложно — это основа.',author:''},
+  {text:'Благодарность превращает то, что у нас есть, в достаточное.',author:''},
+  {text:'Счастье — это не цель, это побочный эффект правильной жизни.',author:'Элеонора Рузвельт'},
+  {text:'Чтение — это тренировка для ума, так же как физические упражнения — для тела.',author:'Стил'},
+  {text:'Знание — сила.',author:'Фрэнсис Бэкон'},
+  {text:'Живи так, как будто умрёшь завтра. Учись так, как будто будешь жить вечно.',author:'Махатма Ганди'},
+  {text:'Сделай сегодня то, о чём завтра будешь рад.',author:''},
+  {text:'Нет ничего невозможного. Само слово говорит: "Я возможно!"',author:'Одри Хепберн'},
+  {text:'Ты ближе к цели, чем думаешь.',author:''},
+  {text:'Неважно как медленно ты идёшь, главное — не останавливаться.',author:'Конфуций'},
+  {text:'Начни с того, что необходимо. Потом сделай то, что возможно. И вдруг обнаружишь, что делаешь невозможное.',author:'Франциск Ассизский'},
+  {text:'Препятствие — это не конец дороги, а поворот.',author:''},
+  {text:'Всё, что тебе нужно — уже в тебе.',author:''},
+  {text:'Сегодняшний день больше никогда не повторится. Используй его.',author:''},
+  {text:'Маленький прогресс — всё равно прогресс.',author:''},
+  {text:'Твои будущие достижения определяются твоими сегодняшними привычками.',author:''},
+  {text:'Сон — это суперсила. Не жертвуй им.',author:''},
+  {text:'Движение — это жизнь. Остановка — это смерть.',author:''},
+  {text:'Язык открывает дверь в другой мир.',author:''},
+  {text:'Каждое утро ты рождаешься заново. Важно то, что ты делаешь сегодня.',author:'Будда'},
+  {text:'Потенциал — это одно. Реализация — совсем другое.',author:''},
+  {text:'Сила воли — это мышца. Тренируй её каждый день.',author:''},
+  {text:'Ты не обязан быть лучше всех. Ты обязан быть лучше, чем вчера.',author:''},
+  {text:'Ограничения существуют только в уме.',author:''},
+  {text:'Лучшее время посадить дерево было 20 лет назад. Второе лучшее время — сейчас.',author:'Китайская пословица'},
+  {text:'Возможности не появляются сами. Их создают.',author:'Крис Гроссер'},
+  {text:'Тот, кто не находит времени на здоровье, найдёт время на болезнь.',author:''},
+  {text:'Спокойный ум важнее быстрого ума.',author:''},
+  {text:'Хочешь изменить мир — начни с себя.',author:'Толстой'},
+  {text:'Жизнь начинается там, где заканчивается зона комфорта.',author:'Нил Дональд Уолш'},
+  {text:'Уверенность приходит не от постоянных успехов, а от умения оправляться после неудач.',author:''},
+  {text:'Сделай шаг, и дорога появится сама.',author:'Стив Джобс'},
+  {text:'Хороший сон — лучшая медитация.',author:'Далай Лама'},
+  {text:'Твоё тело слышит всё, что говорит твой ум.',author:''},
+  {text:'Движение лечит почти всё.',author:''},
+  {text:'Читай. Думай. Действуй.',author:''},
+  {text:'Язык — это окно в другую культуру.',author:''},
+  {text:'AI — инструмент. Мудрость — твоя.',author:''},
+  {text:'Будущее принадлежит тем, кто учится сегодня.',author:''},
+  {text:'Тишина утра стоит больше шума дня.',author:''},
+  {text:'Каждый шаг — это инвестиция в себя.',author:''},
+  {text:'Твои привычки — твой характер.',author:''},
+  {text:'Маленькие победы складываются в большую жизнь.',author:''},
+  {text:'Не думай о том, сколько осталось. Думай о том, как сделать этот шаг.',author:''},
+  {text:'Здоровье — это тихое богатство.',author:''},
+  {text:'Думай медленно, действуй быстро.',author:''},
+  {text:'Терпение и время делают больше, чем сила и страсть.',author:'Лафонтен'},
+  {text:'Лучший способ предсказать своё будущее — создать его.',author:'Питер Друкер'},
+  {text:'Знание без действия — это просто развлечение.',author:''},
+  {text:'Вставай рано. Работай усердно. Найди нефть.',author:'Дж. Пол Гетти'},
+  {text:'Никогда не поздно стать тем, кем ты мог бы быть.',author:'Джордж Элиот'},
+  {text:'Самодисциплина — это высшая форма самолюбия.',author:''},
+  {text:'Ты то, что ты делаешь повторно.',author:''},
+  {text:'Один хороший день — это случайность. Тридцать — это привычка.',author:''},
+  {text:'Усталость — это временно. Гордость за себя — навсегда.',author:''},
+  {text:'Прямо сейчас ты достаточно хорош. Завтра станешь лучше.',author:''},
+  {text:'Трудности делают тебя сильнее или раскрывают твою настоящую силу.',author:''},
+  {text:'Каждая тренировка — это разговор с будущей версией себя.',author:''},
+  {text:'Благодарность — это не слабость. Это суперсила.',author:''},
+  {text:'Люди, которые говорят, что это невозможно, просто боятся попробовать.',author:''},
+  {text:'Твоё завтра зависит от того, что ты делаешь сегодня.',author:''},
+];
+let quoteIndex=Math.floor(Math.random()*QUOTES.length);
+function renderQuote(){
+  const q=QUOTES[quoteIndex];
+  const te=document.getElementById('quote-text'),ae=document.getElementById('quote-author');
+  te.style.opacity=ae.style.opacity='0';
+  setTimeout(()=>{ te.textContent=q.text; ae.textContent=q.author?'— '+q.author:''; te.style.transition=ae.style.transition='opacity .4s'; te.style.opacity=ae.style.opacity='1'; },200);
+}
+function nextQuote(){ let n; do{n=Math.floor(Math.random()*QUOTES.length);}while(n===quoteIndex&&QUOTES.length>1); quoteIndex=n; renderQuote(); }
+
+// ── MAGIC SOUNDS ──────────────────────────────────────────────────────────
+const AC=new(window.AudioContext||window.webkitAudioContext)();
+function resumeAC(){ if(AC.state==='suspended') AC.resume(); }
+function magicSound(type){
+  resumeAC(); const now=AC.currentTime;
+  const node=(f,t,dur,gp,ge,st,fe)=>{ const o=AC.createOscillator(),g=AC.createGain(); o.type=t; o.frequency.setValueAtTime(f,st||now); if(fe) o.frequency.exponentialRampToValueAtTime(fe,(st||now)+dur*0.8); g.gain.setValueAtTime(0.001,st||now); g.gain.linearRampToValueAtTime(gp,(st||now)+0.02); g.gain.exponentialRampToValueAtTime(ge||(gp*0.001),(st||now)+dur); o.connect(g); g.connect(AC.destination); o.start(st||now); o.stop((st||now)+dur+0.01); };
+  if(type==='nav'){ node(660,'sine',0.18,0.08,0.001,now,1100); node(990,'sine',0.14,0.05,0.001,now+0.06,1500); node(1320,'sine',0.10,0.03,0.001,now+0.11); }
+  else if(type==='view'){ node(440,'triangle',0.22,0.07,0.001,now,880); node(880,'sine',0.18,0.04,0.001,now+0.04,440); node(2200,'sine',0.12,0.02,0.001,now+0.08); }
+  else if(type==='edit'){ [0,0.06,0.12,0.18].forEach((delay,i)=>{ const freqs=[523,659,784,1047]; node(freqs[i],'sine',0.3,0.06,0.001,now+delay); }); }
+}
+document.getElementById('btn-prev').addEventListener('click',()=>magicSound('nav'));
+document.getElementById('btn-next').addEventListener('click',()=>magicSound('nav'));
+document.getElementById('btn-week').addEventListener('click',()=>magicSound('view'));
+document.getElementById('btn-month').addEventListener('click',()=>magicSound('view'));
+document.getElementById('edit-btn').addEventListener('click',()=>magicSound('edit'));
+
+// ── CONFETTI ──────────────────────────────────────────────────────────────
+function playFireworkSound(){
+  resumeAC();
+  const now = AC.currentTime;
+  // Soft rising shimmer — like distant sparkle
+  [0, 0.08, 0.16].forEach((delay, i)=>{
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = 'sine';
+    const baseFreqs = [880, 1100, 1320];
+    o.frequency.setValueAtTime(baseFreqs[i] * 0.7, now + delay);
+    o.frequency.exponentialRampToValueAtTime(baseFreqs[i], now + delay + 0.25);
+    g.gain.setValueAtTime(0, now + delay);
+    g.gain.linearRampToValueAtTime(0.06, now + delay + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.35);
+    o.connect(g); g.connect(AC.destination);
+    o.start(now + delay); o.stop(now + delay + 0.4);
+  });
+  // Gentle sparkle ticks
+  [0.1, 0.2, 0.28, 0.35].forEach(t=>{
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = 'sine';
+    o.frequency.value = 2000 + Math.random() * 1500;
+    g.gain.setValueAtTime(0.04, now + t);
+    g.gain.exponentialRampToValueAtTime(0.001, now + t + 0.07);
+    o.connect(g); g.connect(AC.destination);
+    o.start(now + t); o.stop(now + t + 0.08);
+  });
+}
+
+function playCheer(big){
+  resumeAC(); const now=AC.currentTime;
+  for(let b=0;b<(big?6:2);b++){ const t=now+b*(big?0.18:0.25); const buf=AC.createBuffer(1,Math.floor(AC.sampleRate*0.6),AC.sampleRate); const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; const src=AC.createBufferSource(); src.buffer=buf; const bp=AC.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=700+Math.random()*500; bp.Q.value=0.4; const g=AC.createGain(); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(big?0.3:0.18,t+0.05); g.gain.exponentialRampToValueAtTime(0.001,t+0.55); src.connect(bp); bp.connect(g); g.connect(AC.destination); src.start(t); src.stop(t+0.6); }
+  for(let s=0;s<(big?5:1);s++){ const t=now+s*0.22+Math.random()*0.1; const o=AC.createOscillator(),g=AC.createGain(); o.type='sine'; o.frequency.setValueAtTime(900+Math.random()*400,t); o.frequency.exponentialRampToValueAtTime(1600+Math.random()*400,t+0.15); g.gain.setValueAtTime(0.15,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.2); o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t+0.22); }
+}
+let animId=null;
+
+function launchFireworks(){
+  const canvas=document.getElementById('confetti-canvas');
+  const ctx=canvas.getContext('2d');
+  canvas.width=window.innerWidth; canvas.height=window.innerHeight;
+  if(animId) cancelAnimationFrame(animId);
+  playFireworkSound();
+  const fwC=['#FFD700','#FF6B6B','#00CFFF','#B8FF4F','#FF4FCF','#FFA500','#52B788','#7F77DD'];
+  let sparks=[];
+  // 3 random burst points
+  for(let i=0;i<3;i++){
+    setTimeout(()=>{
+      const x=canvas.width*(0.2+Math.random()*0.6);
+      const y=canvas.height*(0.15+Math.random()*0.4);
+      sparks.push(...createFW(ctx,x,y,fwC[Math.floor(Math.random()*fwC.length)]));
+    }, i*180);
+  }
+  const maxF=180; let frame=0;
+  function tick(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    sparks.forEach(s=>{
+      s.trail.push({x:s.x,y:s.y}); if(s.trail.length>8) s.trail.shift();
+      s.x+=s.vx; s.y+=s.vy; s.vy+=0.1; s.vx*=0.98; s.opacity-=0.014;
+      if(s.opacity<=0) return;
+      s.trail.forEach((pt,ti)=>{
+        ctx.beginPath(); ctx.arc(pt.x,pt.y,s.r*(ti/s.trail.length)*0.8,0,Math.PI*2);
+        ctx.fillStyle=s.color; ctx.globalAlpha=s.opacity*(ti/s.trail.length)*0.5; ctx.fill();
+      });
+      ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+      ctx.fillStyle=s.color; ctx.globalAlpha=Math.max(0,s.opacity); ctx.fill(); ctx.globalAlpha=1;
+    });
+    sparks=sparks.filter(s=>s.opacity>0);
+    frame++;
+    if(frame<maxF||sparks.length>0) animId=requestAnimationFrame(tick);
+    else{ ctx.clearRect(0,0,canvas.width,canvas.height); animId=null; }
+  }
+  tick();
+}
+function createFW(ctx,x,y,color){ return Array.from({length:32},()=>{ const a=Math.random()*Math.PI*2,sp=2.5+Math.random()*4; return {x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,r:2+Math.random()*2.5,color,opacity:1,trail:[]}; }); }
+function launchConfetti(big){
+  const canvas=document.getElementById('confetti-canvas'); const ctx=canvas.getContext('2d');
+  canvas.width=window.innerWidth; canvas.height=window.innerHeight;
+  if(animId) cancelAnimationFrame(animId); playCheer(big);
+  const colors=['#52B788','#7F77DD','#FF6B6B','#378ADD','#FFD700','#FF69B4','#00CFFF','#FFA500','#B8FF4F','#FF4FCF'];
+  const N=big?380:90;
+  const particles=Array.from({length:N},()=>{ const s=Math.random()>0.5; return {x:s?Math.random()*canvas.width*0.35:canvas.width*0.65+Math.random()*canvas.width*0.35,y:canvas.height+10,vx:(s?1:-1)*(1+Math.random()*4),vy:-(8+Math.random()*12),r:4+Math.random()*7,color:colors[Math.floor(Math.random()*colors.length)],tilt:Math.random()*Math.PI*2,tiltSpeed:(Math.random()-0.5)*0.2,gravity:0.25+Math.random()*0.15,opacity:1,shape:['rect','circle','star','ribbon'][Math.floor(Math.random()*4)],delay:Math.random()*(big?55:18)}; });
+  let sparks=[]; const fwC=['#FFD700','#FF6B6B','#00CFFF','#B8FF4F','#FF4FCF','#FFA500'];
+  if(big)[0,28,56,84,112].forEach((dl,i)=>setTimeout(()=>sparks.push(...createFW(ctx,canvas.width*(0.15+Math.random()*0.7),canvas.height*(0.08+Math.random()*0.35),fwC[i%fwC.length])),dl*16));
+  const maxF=big?300:150; let frame=0;
+  function drawStar(x,y,r,col,op){ ctx.save();ctx.globalAlpha=op;ctx.fillStyle=col;ctx.translate(x,y);ctx.beginPath();for(let i=0;i<5;i++){const a=i*4*Math.PI/5-Math.PI/2,ia=a+2*Math.PI/5;i===0?ctx.moveTo(Math.cos(a)*r,Math.sin(a)*r):ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r);ctx.lineTo(Math.cos(ia)*(r*0.4),Math.sin(ia)*(r*0.4));}ctx.closePath();ctx.fill();ctx.restore(); }
+  function tick(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    particles.forEach(p=>{ if(frame<p.delay)return; p.vy+=p.gravity;p.vx*=0.99;p.x+=p.vx;p.y+=p.vy;p.tilt+=p.tiltSpeed; if(frame>maxF*0.65)p.opacity-=0.018; if(p.opacity<=0||p.y>canvas.height+20)return; ctx.save();ctx.globalAlpha=Math.max(0,p.opacity);ctx.fillStyle=p.color;ctx.translate(p.x,p.y);ctx.rotate(p.tilt); if(p.shape==='circle'){ctx.beginPath();ctx.arc(0,0,p.r/2,0,Math.PI*2);ctx.fill();}else if(p.shape==='star'){ctx.restore();drawStar(p.x,p.y,p.r,p.color,Math.max(0,p.opacity));return;}else if(p.shape==='ribbon')ctx.fillRect(-p.r*0.3,-p.r,p.r*0.6,p.r*2);else ctx.fillRect(-p.r/2,-p.r/2,p.r,p.r*1.6);ctx.restore(); });
+    sparks.forEach(s=>{ s.trail.push({x:s.x,y:s.y});if(s.trail.length>6)s.trail.shift();s.x+=s.vx;s.y+=s.vy;s.vy+=0.12;s.vx*=0.98;s.opacity-=0.018;if(s.opacity<=0)return;s.trail.forEach((pt,ti)=>{ctx.beginPath();ctx.arc(pt.x,pt.y,s.r*(ti/s.trail.length)*0.6,0,Math.PI*2);ctx.fillStyle=s.color;ctx.globalAlpha=s.opacity*(ti/s.trail.length)*0.4;ctx.fill();});ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fillStyle=s.color;ctx.globalAlpha=Math.max(0,s.opacity);ctx.fill();ctx.globalAlpha=1; });
+    sparks=sparks.filter(s=>s.opacity>0);
+    frame++;
+    if(frame<maxF||sparks.length>0) animId=requestAnimationFrame(tick);
+    else{ctx.clearRect(0,0,canvas.width,canvas.height);animId=null;}
+  }
+  tick();
+}
+
+// ── USER AVATAR ──────────────────────────────────────────────────────────────
+function uploadAvatar(e){
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    document.getElementById('user-menu').classList.remove('open');
+    showCropUI(ev.target.result);
+  };
+  reader.readAsDataURL(file);
+}
+
+function showCropUI(src){
+  // Remove existing
+  const old = document.getElementById('crop-overlay'); if(old) old.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'crop-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px';
+  overlay.innerHTML = `
+    <div style="color:#fff;font-size:15px;font-family:var(--sans)">Выберите область фото</div>
+    <div style="position:relative;user-select:none" id="crop-wrap">
+      <img id="crop-img" src="${src}" style="max-width:min(90vw,500px);max-height:60vh;display:block">
+      <div id="crop-box" style="position:absolute;border:2px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.5);cursor:move;aspect-ratio:1"></div>
+    </div>
+    <div style="display:flex;gap:12px">
+      <button onclick="document.getElementById('crop-overlay').remove()" style="padding:10px 24px;border-radius:10px;border:1px solid rgba(255,255,255,.3);background:none;color:#fff;cursor:pointer;font-family:var(--sans)">Отмена</button>
+      <button onclick="cropAndSave()" style="padding:10px 24px;border-radius:10px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-family:var(--sans);font-weight:500">Сохранить</button>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  // Init crop box after image loads
+  const img = document.getElementById('crop-img');
+  img.onload = initCrop;
+  if(img.complete) initCrop();
+}
+
+function initCrop(){
+  const img = document.getElementById('crop-img');
+  const wrap = document.getElementById('crop-wrap');
+  const box = document.getElementById('crop-box');
+  wrap.style.width = img.offsetWidth+'px';
+  wrap.style.height = img.offsetHeight+'px';
+  const size = Math.min(img.offsetWidth, img.offsetHeight) * 0.7;
+  let bx = (img.offsetWidth - size)/2, by = (img.offsetHeight - size)/2;
+  const setBox = ()=>{ box.style.left=bx+'px'; box.style.top=by+'px'; box.style.width=size+'px'; box.style.height=size+'px'; };
+  setBox();
+  // Drag
+  let drag=false, ox=0, oy=0;
+  box.addEventListener('mousedown', e=>{ drag=true; ox=e.clientX-bx; oy=e.clientY-by; e.preventDefault(); });
+  box.addEventListener('touchstart', e=>{ drag=true; ox=e.touches[0].clientX-bx; oy=e.touches[0].clientY-by; e.preventDefault(); },{passive:false});
+  const move = (cx,cy)=>{ if(!drag)return; bx=Math.max(0,Math.min(img.offsetWidth-size, cx-ox)); by=Math.max(0,Math.min(img.offsetHeight-size, cy-oy)); setBox(); };
+  document.addEventListener('mousemove', e=>move(e.clientX,e.clientY));
+  document.addEventListener('touchmove', e=>move(e.touches[0].clientX,e.touches[0].clientY),{passive:true});
+  document.addEventListener('mouseup', ()=>drag=false);
+  document.addEventListener('touchend', ()=>drag=false);
+}
+
+function cropAndSave(){
+  const img = document.getElementById('crop-img');
+  const box = document.getElementById('crop-box');
+  const scaleX = img.naturalWidth / img.offsetWidth;
+  const scaleY = img.naturalHeight / img.offsetHeight;
+  const sx = parseFloat(box.style.left) * scaleX;
+  const sy = parseFloat(box.style.top) * scaleY;
+  const sw = parseFloat(box.style.width) * scaleX;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 120;
+  canvas.getContext('2d').drawImage(img, sx, sy, sw, sw, 0, 0, 120, 120);
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+  localStorage.setItem('customAvatar', dataUrl);
+  applyAvatar(dataUrl);
+  document.getElementById('crop-overlay').remove();
+}
+
+function applyAvatar(src){
+  const av = document.getElementById('user-avatar');
+  av.style.backgroundImage = 'url('+src+')';
+  av.style.backgroundSize = 'cover';
+  av.style.backgroundPosition = 'center';
+  av.style.color = 'transparent';
+}
+
+function setUserAvatar(user){
+  const av = document.getElementById('user-avatar');
+  const menu = document.getElementById('user-menu');
+  Array.from(av.childNodes).forEach(n=>{ if(n.nodeType===3) av.removeChild(n); });
+  const initial = (user.user_metadata?.full_name || user.email || '?')[0].toUpperCase();
+  av.insertBefore(document.createTextNode(initial), menu);
+  // Priority: custom uploaded > Google > initials
+  const customAvatar = localStorage.getItem('customAvatar');
+  if(customAvatar){
+    applyAvatar(customAvatar);
+  } else {
+    const pic = user.user_metadata?.avatar_url;
+    if(pic){
+      av.style.backgroundImage = 'url('+pic+')';
+      av.style.backgroundSize = 'cover';
+      av.style.backgroundPosition = 'center';
+      av.style.color = 'transparent';
+    } else {
+      av.style.backgroundImage = '';
+      av.style.color = '#fff';
+    }
+  }
+  document.getElementById('user-email-display').textContent = user.email || '';
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────
+(async()=>{
+  // Theme
+  const t=localStorage.getItem('theme');
+  if(t==='dark'){isDark=true;document.documentElement.setAttribute('data-theme','dark');document.getElementById('theme-btn').textContent='☀️';}
+  view=(window.innerWidth<=600)?'week':(localStorage.getItem('view')||'week');
+  HABITS=JSON.parse(localStorage.getItem('customHabits')||'null')||DEFAULT_HABITS;
+  buildEmojiPicker();
+  renderQuote();
+
+  // Auth state listener
+  sb.auth.onAuthStateChange(async(event, session)=>{
+    console.log('Auth event:', event, session?.user?.email);
+    if(event === 'SIGNED_OUT'){
+      currentUser = null;
+      data = {};
+      showScreen('auth');
+      return;
+    }
+    if(event === 'SIGNED_IN' && session && session.user){
+      // Only reload data if different user or first login
+      const isNewUser = !currentUser || currentUser.id !== session.user.id;
+      currentUser = session.user;
+      setUserAvatar(currentUser);
+      if(isNewUser){
+        // Clear previous user's cached habits before loading new user's data
+        data = {};
+        HABITS = DEFAULT_HABITS;
+        localStorage.removeItem('customHabits');
+      }
+      showScreen('app');
+      render();
+      if(isNewUser){ await loadData(); subscribeRealtime(); }
+    }
+    if(event === 'TOKEN_REFRESHED' && session){
+      currentUser = session.user;
+    }
+  });
+
+  // Check existing session on load
+  const {data:{session}, error:sessErr} = await sb.auth.getSession();
+  console.log('Initial session:', session?.user?.email, sessErr);
+  // Now safe to clear hash — Supabase already read the token
+  if(window.location.hash && window.location.hash.includes('access_token')){
+    history.replaceState(null, '', window.location.pathname);
+  }
+  if(session && session.user){
+    currentUser = session.user;
+    setUserAvatar(currentUser);
+    // Reset to defaults — loadData will fill from server
+    data = {};
+    HABITS = DEFAULT_HABITS;
+    showScreen('app');
+    render();
+    await loadData();
+    subscribeRealtime();
+  } else {
+    showScreen('auth');
+  }
+})();
+
+/* ═══════════════ ✨ DISNEY MAGIC — JS ═══════════════ */
+(function magic(){
+  document.body.classList.add('magic-cursor');
+
+  // Искорки за курсором
+  let lastSpark = 0;
+  document.addEventListener('mousemove', function(e){
+    const now = Date.now();
+    if(now - lastSpark < 60) return;
+    lastSpark = now;
+    if(Math.random() > 0.45) return;
+    const s = document.createElement('div');
+    s.className = 'spark';
+    s.style.left = (e.clientX + (Math.random()*8-4)) + 'px';
+    s.style.top  = (e.clientY + (Math.random()*8-4)) + 'px';
+    s.style.width = s.style.height = (4 + Math.random()*6) + 'px';
+    document.body.appendChild(s);
+    setTimeout(function(){ s.remove(); }, 1000);
+  });
+
+  // Ночные звёздочки
+  function buildStars(){
+    let layer = document.querySelector('.night-stars');
+    if(!layer){
+      layer = document.createElement('div');
+      layer.className = 'night-stars';
+      document.body.appendChild(layer);
+    }
+    layer.innerHTML = '';
+    for(let i=0;i<40;i++){
+      const star = document.createElement('div');
+      star.className = 'night-star';
+      const sz = 1 + Math.random()*2.2;
+      star.style.width = star.style.height = sz + 'px';
+      star.style.left = (Math.random()*100) + '%';
+      star.style.top  = (Math.random()*100) + '%';
+      star.style.animationDelay = (Math.random()*3) + 's';
+      star.style.animationDuration = (2 + Math.random()*3) + 's';
+      layer.appendChild(star);
+    }
+  }
+  buildStars();
+  const themeObs = new MutationObserver(buildStars);
+  themeObs.observe(document.body, {attributes:true, attributeFilter:['class']});
+
+  // Плавное появление отключено — мигало при ре-рендере
+
+  // Sparkle в шапке
+  setTimeout(function(){
+    const h = document.querySelector('header h1, header h2, .header h1, .header h2, h1');
+    if(h && !h.classList.contains('app-title')) h.classList.add('app-title');
+  }, 200);
+
+  // Pixie dust burst
+  function pixieBurst(){
+    const burst = document.createElement('div');
+    burst.className = 'pixie-dust';
+    document.body.appendChild(burst);
+    const N = 32;
+    for(let i=0;i<N;i++){
+      const p = document.createElement('div');
+      p.className = 'pixie-particle';
+      const angle = (Math.PI*2 / N) * i + Math.random()*0.4;
+      const dist = 140 + Math.random()*200;
+      p.style.setProperty('--px', Math.cos(angle)*dist + 'px');
+      p.style.setProperty('--py', Math.sin(angle)*dist + 'px');
+      p.style.animationDelay = (Math.random()*0.15) + 's';
+      burst.appendChild(p);
+    }
+    setTimeout(function(){ burst.remove(); }, 2200);
+  }
+
+  // Pixie dust звук
+  let actx = null;
+  function playPixie(){
+    try{
+      if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
+      const now = actx.currentTime;
+      const notes = [880, 1175, 1568, 2093, 2637];
+      notes.forEach(function(f, i){
+        const o = actx.createOscillator();
+        const g = actx.createGain();
+        o.type = 'triangle';
+        o.frequency.value = f;
+        g.gain.setValueAtTime(0, now + i*0.06);
+        g.gain.linearRampToValueAtTime(0.14, now + i*0.06 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.001, now + i*0.06 + 0.5);
+        o.connect(g); g.connect(actx.destination);
+        o.start(now + i*0.06); o.stop(now + i*0.06 + 0.55);
+      });
+    }catch(e){}
+  }
+
+  // Magic Moment отключён
+
+  // Хук на toggle отключён — лишние анимации убраны
+})();
+</script>
+</body>
+</html>
