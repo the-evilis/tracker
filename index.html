@@ -61,7 +61,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--sans);color:va
 .header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px}
 .header-left h1{font-family:var(--serif);font-size:clamp(26px,5vw,36px);font-weight:400;font-style:italic;line-height:1.1}
 .date-sub{font-size:12px;color:var(--text3);margin-top:4px;letter-spacing:.03em;text-transform:uppercase}
-.sync-status{font-size:11px;color:var(--text3);margin-top:3px}
+.sync-status{font-size:11px;color:var(--text3);margin-top:3px}#sync-status{position:absolute;top:100%;left:0;font-size:11px;color:var(--text3);margin-top:3px;opacity:0;transition:opacity 0.3s;pointer-events:none;white-space:nowrap}.header-left{position:relative}
 .header-btns{display:flex;gap:8px;margin-top:4px;flex-shrink:0}
 .icon-btn{width:40px;height:40px;border-radius:50%;border:1px solid var(--border);background:var(--surface);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;transition:background .2s;color:var(--text)}
 .icon-btn:hover{background:var(--surface2)}
@@ -144,7 +144,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--sans);color:va
 .modal-overlay.open{display:flex}
 .modal{background:var(--surface);border-radius:var(--radius);padding:24px;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)}
 .modal h2{font-family:var(--serif);font-size:22px;font-style:italic;margin-bottom:16px;color:var(--text)}
-.edit-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)}
+.edit-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);transition:background .15s,opacity .15s;cursor:grab}.edit-row:active{cursor:grabbing}.edit-row.dragging{opacity:0.4}.edit-row.drop-target{background:var(--surface2);border-radius:6px}.drag-handle{color:var(--text3);font-size:18px;cursor:grab;user-select:none;padding:0 4px;letter-spacing:-3px;font-weight:700}.drag-handle:active{cursor:grabbing}
 .edit-row:last-child{border-bottom:none}
 .edit-icon-btn{font-size:20px;width:34px;height:34px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s}
 .edit-icon-btn:hover{background:var(--border)}
@@ -290,7 +290,7 @@ body:not(.dark) .night-stars{display:none}
     <div class="header-left">
       <h1>Трекер привычек</h1>
       <div class="date-sub" id="date-sub"></div>
-      <div id="sync-status" style="font-size:11px;min-height:14px;color:var(--text3);margin-top:3px;opacity:0;transition:opacity 0.3s"></div>
+      <div id="sync-status"></div>
     </div>
     <div class="header-btns">
       <button class="icon-btn" id="edit-btn" onclick="openModal()" title="Редактировать привычки"><span style="font-size:20px;line-height:1">⚙️</span></button>
@@ -922,12 +922,48 @@ function openModal(){ editBuffer=HABITS.map(h=>Object.assign({},h)); renderEdito
 function closeModal(){ document.getElementById('edit-modal').classList.remove('open'); closeEmojiPicker(); }
 function renderEditor(){
   document.getElementById('habit-editor').innerHTML=editBuffer.map((h,i)=>
-    '<div class="edit-row">'+
+    '<div class="edit-row" draggable="true" data-idx="'+i+'" '+
+         'ondragstart="dragStart(event,'+i+')" '+
+         'ondragover="dragOver(event)" '+
+         'ondrop="dragDrop(event,'+i+')" '+
+         'ondragend="dragEnd(event)" '+
+         'ondragleave="dragLeave(event)">'+
+      '<span class="drag-handle" title="Перетащи чтобы изменить порядок">⋮⋮</span>'+
       '<button class="edit-icon-btn" onclick="openEmojiPicker('+i+',this)" title="Выбрать эмодзи">'+h.icon+'</button>'+
       '<input class="edit-input" value="'+h.name.replace(/"/g,'&quot;')+'" oninput="editBuffer['+i+'].name=this.value" maxlength="30">'+
       '<button class="del-btn" onclick="removeHabit('+i+')">✕</button>'+
     '</div>'
   ).join('');
+}
+
+// ── DRAG REORDER ───────────────────────────────────────────────────────
+let dragSrcIdx=null;
+function dragStart(e,i){
+  dragSrcIdx=i;
+  e.dataTransfer.effectAllowed='move';
+  e.dataTransfer.setData('text/plain', String(i));
+  e.currentTarget.classList.add('dragging');
+}
+function dragOver(e){
+  e.preventDefault();
+  e.dataTransfer.dropEffect='move';
+  const row=e.currentTarget;
+  if(!row.classList.contains('drop-target')) row.classList.add('drop-target');
+}
+function dragLeave(e){ e.currentTarget.classList.remove('drop-target'); }
+function dragDrop(e,toIdx){
+  e.preventDefault();
+  e.currentTarget.classList.remove('drop-target');
+  if(dragSrcIdx===null || dragSrcIdx===toIdx) return;
+  const moved=editBuffer.splice(dragSrcIdx,1)[0];
+  editBuffer.splice(toIdx,0,moved);
+  dragSrcIdx=null;
+  renderEditor();
+}
+function dragEnd(e){
+  e.currentTarget.classList.remove('dragging');
+  document.querySelectorAll('.edit-row.drop-target').forEach(r=>r.classList.remove('drop-target'));
+  dragSrcIdx=null;
 }
 function removeHabit(i){ editBuffer.splice(i,1); renderEditor(); }
 
@@ -1121,8 +1157,41 @@ function playFireworkSound(){
 
 function playCheer(big){
   resumeAC(); const now=AC.currentTime;
-  for(let b=0;b<(big?6:2);b++){ const t=now+b*(big?0.18:0.25); const buf=AC.createBuffer(1,Math.floor(AC.sampleRate*0.6),AC.sampleRate); const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; const src=AC.createBufferSource(); src.buffer=buf; const bp=AC.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=700+Math.random()*500; bp.Q.value=0.4; const g=AC.createGain(); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(big?0.3:0.18,t+0.05); g.gain.exponentialRampToValueAtTime(0.001,t+0.55); src.connect(bp); bp.connect(g); g.connect(AC.destination); src.start(t); src.stop(t+0.6); }
-  for(let s=0;s<(big?5:1);s++){ const t=now+s*0.22+Math.random()*0.1; const o=AC.createOscillator(),g=AC.createGain(); o.type='sine'; o.frequency.setValueAtTime(900+Math.random()*400,t); o.frequency.exponentialRampToValueAtTime(1600+Math.random()*400,t+0.15); g.gain.setValueAtTime(0.15,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.2); o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t+0.22); }
+  // Magical chime: C major arpeggio + sparkly fairy dust ticks
+  const notes = big
+    ? [523.25, 659.25, 783.99, 1046.50, 1318.51, 1567.98]
+    : [523.25, 659.25, 783.99, 1046.50];
+  notes.forEach((freq, i)=>{
+    const t = now + i * 0.05;
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.linearRampToValueAtTime(big ? 0.14 : 0.10, t + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+    o.connect(g); g.connect(AC.destination);
+    o.start(t); o.stop(t + 0.75);
+    const o2 = AC.createOscillator(), g2 = AC.createGain();
+    o2.type = 'triangle';
+    o2.frequency.setValueAtTime(freq * 2, t);
+    g2.gain.setValueAtTime(0.001, t);
+    g2.gain.linearRampToValueAtTime(0.035, t + 0.02);
+    g2.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+    o2.connect(g2); g2.connect(AC.destination);
+    o2.start(t); o2.stop(t + 0.5);
+  });
+  const tickCount = big ? 12 : 5;
+  for(let s=0; s<tickCount; s++){
+    const t = now + 0.05 + Math.random() * (big ? 0.6 : 0.3);
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(2400 + Math.random() * 1600, t);
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.linearRampToValueAtTime(0.04, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+    o.connect(g); g.connect(AC.destination);
+    o.start(t); o.stop(t + 0.12);
+  }
 }
 let animId=null;
 
@@ -1274,21 +1343,22 @@ function setUserAvatar(user){
   Array.from(av.childNodes).forEach(n=>{ if(n.nodeType===3) av.removeChild(n); });
   const initial = (user.user_metadata?.full_name || user.email || '?')[0].toUpperCase();
   av.insertBefore(document.createTextNode(initial), menu);
-  // Priority: custom uploaded > Google > initials
+  av.style.backgroundImage = '';
+  av.style.color = '#fff';
   const customAvatar = localStorage.getItem('customAvatar');
-  if(customAvatar){
-    applyAvatar(customAvatar);
-  } else {
-    const pic = user.user_metadata?.avatar_url;
-    if(pic){
-      av.style.backgroundImage = 'url('+pic+')';
-      av.style.backgroundSize = 'cover';
-      av.style.backgroundPosition = 'center';
-      av.style.color = 'transparent';
-    } else {
-      av.style.backgroundImage = '';
-      av.style.color = '#fff';
-    }
+  if(customAvatar){ applyAvatar(customAvatar); document.getElementById('user-email-display').textContent = user.email || ''; return; }
+  // Find Google profile picture across all possible Supabase fields
+  const pic = user.user_metadata?.avatar_url
+          || user.user_metadata?.picture
+          || user.identities?.[0]?.identity_data?.avatar_url
+          || user.identities?.[0]?.identity_data?.picture
+          || null;
+  if(pic){
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = ()=>{ av.style.backgroundImage = 'url("'+pic+'")'; av.style.backgroundSize = 'cover'; av.style.backgroundPosition = 'center'; av.style.color = 'transparent'; };
+    img.onerror = ()=>{ av.style.backgroundImage = ''; av.style.color = '#fff'; };
+    img.src = pic;
   }
   document.getElementById('user-email-display').textContent = user.email || '';
 }
