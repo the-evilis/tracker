@@ -54,14 +54,27 @@ nginx -t
 ## Включить бэкапы базы
 
 Бэкап уже стоит в cron, но пропускается, пока не задана строка подключения.
+`postgresql-client` на сервере уже установлен.
 
-1. В дашборде Supabase: **Project Settings → Database → Connection string → URI**.
-2. Вписать её в `/opt/tracker/.env` в поле `SUPABASE_DB_URL`.
-3. Поставить клиент Postgres и проверить:
+**Где взять строку подключения.** В новом интерфейсе Supabase раздела
+«Settings → Database» больше нет: строка живёт за кнопкой **Connect** в
+верхней панели проекта, рядом с его названием.
+
+**Какой именно вариант брать — важно.** В диалоге Connect несколько вкладок:
+
+| Вариант | Порт | Годится? |
+|---|---|---|
+| Direct connection | 5432 | **Нет.** На бесплатном тарифе он только по IPv6, а у этого VPS IPv6 нет вообще |
+| Session pooler | 5432 | **Да, берём этот.** Работает по IPv4 и держит длинные сессии, которые нужны `pg_dump` |
+| Transaction pooler | 6543 | Нет, `pg_dump` с ним не работает |
+
+Строка Session pooler выглядит так:
+`postgresql://postgres.<ref>:<пароль>@aws-0-<регион>.pooler.supabase.com:5432/postgres`
+
+Если пароль базы забыт — там же, в Connect, есть ссылка на его сброс.
 
 ```bash
-apt install -y postgresql-client
-nano /opt/tracker/.env          # SUPABASE_DB_URL=postgresql://postgres:...
+nano /opt/tracker/.env          # SUPABASE_DB_URL=postgresql://postgres.xxx:...@aws-0-...:5432/postgres
 /opt/tracker/backup.sh
 tail -5 /var/log/tracker-backup.log
 ls -lh /opt/tracker/backups/
