@@ -2,8 +2,22 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Трекер привычек</title>
+<meta name="description" content="Трекер привычек: отмечайте выполнение каждый день, следите за сериями и прогрессом. Работает офлайн, синхронизируется между устройствами.">
+<meta name="theme-color" content="#2D6A4F" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111210" media="(prefers-color-scheme: dark)">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Трекер привычек">
+<meta property="og:description" content="Отмечайте привычки каждый день, следите за сериями и прогрессом.">
+<meta property="og:image" content="/icon-512.png">
+<meta name="twitter:card" content="summary">
+<!-- PWA: иконка на домашнем экране и запуск без адресной строки -->
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -207,6 +221,33 @@ body:not(.dark) .night-stars{display:none}
 .magic-text{font-size:48px;font-weight:800;background:linear-gradient(135deg,#FFD060,#FF9F1C,#D4537E,#7F77DD);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-shadow:0 0 40px rgba(255,208,96,0.6);animation:magicGlow 2s ease-out;text-align:center;padding:0 20px}
 @keyframes overlayPulse{0%{backdrop-filter:blur(0)}30%{backdrop-filter:blur(2px)}100%{backdrop-filter:blur(0)}}
 @keyframes magicGlow{0%{transform:scale(0.3) rotate(-10deg);opacity:0}25%{transform:scale(1.1) rotate(2deg);opacity:1}50%{transform:scale(1) rotate(0)}100%{transform:scale(1.4);opacity:0}}
+
+/* ── Уважение к настройке «уменьшить движение» ──
+   Системная настройка ОС; её включают люди с вестибулярными нарушениями.
+   Гасим декоративные анимации, оставляя интерфейс полностью рабочим. */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.01ms!important;
+    animation-iteration-count:1!important;
+    transition-duration:.01ms!important;
+    scroll-behavior:auto!important;
+  }
+  .night-stars,.spark,.pixie-dust{display:none!important}
+  #confetti-canvas{display:none!important}
+}
+
+/* ── Всплывающее уведомление (экспорт/импорт, ошибки) ── */
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(8px);
+  background:var(--text);color:var(--bg);padding:11px 18px;border-radius:12px;
+  font-size:13px;font-family:var(--sans);z-index:10001;opacity:0;pointer-events:none;
+  transition:opacity .25s,transform .25s;max-width:calc(100vw - 32px);text-align:center;
+  box-shadow:0 6px 24px rgba(0,0,0,.25)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.err{background:#B4342A;color:#fff}
+
+/* ── Значок «есть несохранённые изменения» ── */
+.pending-dot{display:inline-block;width:6px;height:6px;border-radius:50%;
+  background:#D97706;margin-right:5px;vertical-align:middle}
 </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -214,6 +255,7 @@ body:not(.dark) .night-stars{display:none}
 </head>
 <body>
 <canvas id="confetti-canvas"></canvas>
+<div class="toast" id="toast"></div>
 
 <!-- AUTH SCREEN -->
 <div id="auth-screen" class="auth-screen" style="display:none">
@@ -299,8 +341,13 @@ body:not(.dark) .night-stars{display:none}
         <div class="user-menu" id="user-menu">
           <div class="user-email" id="user-email-display"></div>
           <label class="user-menu-item" style="cursor:pointer;display:flex;align-items:center;gap:8px">
-            📷 Сменить фото
+            📷 Фото (на этом устройстве)
             <input type="file" id="avatar-upload" accept="image/*" style="display:none" onchange="uploadAvatar(event)">
+          </label>
+          <button class="user-menu-item" id="export-btn" onclick="exportData()" style="width:100%;text-align:left;border:none;background:none;cursor:pointer;font-family:var(--sans)">⬇️ Скачать данные</button>
+          <label class="user-menu-item" style="cursor:pointer;display:flex;align-items:center;gap:8px">
+            ⬆️ Загрузить из файла
+            <input type="file" id="import-file" accept="application/json,.json" style="display:none" onchange="importData(event)">
           </label>
           <button class="user-menu-item" id="signout-btn" style="width:100%;text-align:left;border:none;background:none;cursor:pointer;font-family:var(--sans)">🚪 Выйти</button>
         </div>
@@ -339,7 +386,7 @@ function enterDemo(){
   isDemoMode = true;
   currentUser = null;
   data = {};
-  HABITS = DEFAULT_HABITS;
+  HABITS = cloneDefaults();
   document.getElementById('demo-banner').style.display = 'flex';
   // Set demo avatar
   const av = document.getElementById('user-avatar');
@@ -396,11 +443,14 @@ async function signInWithGoogle() {
 }
 
 async function signOut() {
-  console.log('signOut called');
+  // Перед выходом пытаемся досдать всё, что осталось в очереди.
+  if(queueSize() > 0){
+    if(!confirm('Есть ' + queueSize() + ' несохранённых отметок. Выйти всё равно?\n\n' +
+                'Они пропадут — лучше дождаться синхронизации.')) return;
+  }
   document.getElementById('user-menu').classList.remove('open');
   setSyncStatus('выход...');
-  const {error} = await sb.auth.signOut();
-  console.log('signOut result:', error);
+  await sb.auth.signOut();
   currentUser = null;
   data = {};
   // Clear cached data
@@ -441,32 +491,61 @@ function showScreen(name){
   document.getElementById('main-app').style.display = name==='app' ? 'block' : 'none';
 }
 
-function initUserUI(user){
-  currentUser = user;
-  const initials = (user.email||'?')[0].toUpperCase();
-  const av = document.getElementById('user-avatar');
-  av.childNodes[0].nodeType===3 ? av.insertAdjacentText('afterbegin',initials) : null;
-  av.querySelector('.user-menu').before(document.createTextNode(initials));
-  // set avatar letter
-  const menu = document.getElementById('user-menu');
-  const txt = av.childNodes[0];
-  if(txt && txt.nodeType===3) av.removeChild(txt);
-  av.insertBefore(document.createTextNode(initials), menu);
-  document.getElementById('user-email-display').textContent = user.email || '';
+
+// ── ОБЩИЕ УТИЛИТЫ ─────────────────────────────────────────────────────────
+// Экранирование пользовательского текста перед вставкой в innerHTML.
+// Без него привычка с символом «<» в названии ломает вёрстку карточки.
+function esc(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+  })[c]);
+}
+
+// Системная настройка «уменьшить движение» — глушим салюты и искры.
+const REDUCED_MOTION = window.matchMedia &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Короткое всплывающее сообщение (экспорт, импорт, ошибки).
+let toastTimer = null;
+function toast(msg, isError){
+  const el = document.getElementById('toast');
+  if(!el) return;
+  el.textContent = msg;
+  el.className = 'toast show' + (isError ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ el.className = 'toast'; }, isError ? 5000 : 2600);
+}
+
+// Идентификатор привычки: буквы/цифры/дефис, никогда не чисто число —
+// по этому признаку отличаем новые ключи данных от старых (см. миграцию).
+function newHabitId(){
+  const rnd = (window.crypto && crypto.randomUUID)
+    ? crypto.randomUUID().slice(0, 8)
+    : Math.random().toString(36).slice(2, 10);
+  return 'h-' + Date.now().toString(36) + '-' + rnd;
 }
 
 // ── DATA ──────────────────────────────────────────────────────────────────
+// id у привычек постоянный: отметки хранятся по нему, а не по позиции
+// в списке, поэтому удаление и перетаскивание не сдвигают историю.
+// id вида legacy-N совпадает с прежним номером привычки в списке, поэтому
+// перенос старых отметок сводится к замене последнего сегмента ключа и
+// не зависит ни от сервера, ни от того, какой список загрузился первым.
 const DEFAULT_HABITS = [
-  {name:'Медитация',         icon:'🧘',  color:'#7F77DD', bg:'#EEEDFE'},
-  {name:'Благодарность',     icon:'🌼',  color:'#1D9E75', bg:'#E1F5EE'},
-  {name:'Чтение',            icon:'📖',  color:'#D4537E', bg:'#FBEAF0'},
-  {name:'Воркаут',           icon:'🏋️‍♂️', color:'#378ADD', bg:'#E6F1FB'},
-  {name:'Иностранный язык',  icon:'📚',  color:'#D85A30', bg:'#FAECE7'},
-  {name:'8000 шагов',        icon:'🏃',  color:'#0F6E56', bg:'#E1F5EE'},
-  {name:'Стретчинг',         icon:'🤸',  color:'#BA7517', bg:'#FAEEDA'},
-  {name:'Дневник',           icon:'📓',  color:'#4338CA', bg:'#EEF2FF'},
-  {name:'Режим сна',         icon:'🛌',  color:'#639922', bg:'#EAF3DE'},
+  {id:'legacy-0', name:'Медитация',         icon:'🧘',  color:'#7F77DD', bg:'#EEEDFE'},
+  {id:'legacy-1', name:'Благодарность',     icon:'🌼',  color:'#1D9E75', bg:'#E1F5EE'},
+  {id:'legacy-2', name:'Чтение',            icon:'📖',  color:'#D4537E', bg:'#FBEAF0'},
+  {id:'legacy-3', name:'Воркаут',           icon:'🏋️‍♂️', color:'#378ADD', bg:'#E6F1FB'},
+  {id:'legacy-4', name:'Иностранный язык',  icon:'📚',  color:'#D85A30', bg:'#FAECE7'},
+  {id:'legacy-5', name:'8000 шагов',        icon:'🏃',  color:'#0F6E56', bg:'#E1F5EE'},
+  {id:'legacy-6', name:'Стретчинг',         icon:'🤸',  color:'#BA7517', bg:'#FAEEDA'},
+  {id:'legacy-7', name:'Дневник',           icon:'📓',  color:'#4338CA', bg:'#EEF2FF'},
+  {id:'legacy-8', name:'Режим сна',         icon:'🛌',  color:'#639922', bg:'#EAF3DE'},
 ];
+// Всегда отдаём копию: иначе правки в редакторе мутировали бы эталонный
+// список и «сброс к стандартным» перестал бы работать.
+function cloneDefaults(){ return DEFAULT_HABITS.map(h=>Object.assign({}, h)); }
+
 const COLOR_POOL=['#7F77DD','#1D9E75','#D85A30','#378ADD','#639922','#BA7517','#D4537E','#0F6E56','#C2410C','#4338CA'];
 const BG_POOL   =['#EEEDFE','#E1F5EE','#FAECE7','#E6F1FB','#EAF3DE','#FAEEDA','#FBEAF0','#E1F5EE','#FEF3C7','#EEF2FF'];
 const EMOJI_POOL=['🧘','🏋️','🤸','📖','🚶','🤖','🇬🇧','💧','🗣️','🌙','🎯','💊','🧠','✍️','🎸','🏃','🥗','☕','📝','⚡','🔥','🎵','🧹','💻','🏊','🚴','🌿','🧘‍♂️','🍎','🛏️','📚','🎨','🏆','💪','🧬','🫁','🫀','🌅','🥋','🧗'];
@@ -559,9 +638,77 @@ function setSyncStatus(msg, ok){
   el.style.opacity = msg ? '1' : '0';
 }
 
-function dkey(y,m,d,hi){ return y+'/'+m+'/'+d+'/'+hi; }
+// Ключ отметки: дата + постоянный id привычки.
+function dkey(y,m,d,hid){ return y+'/'+m+'/'+d+'/'+hid; }
 
 function cacheKey(){ return 'ht_'+((currentUser&&currentUser.id)||'anon'); }
+function queueKey(){ return 'htq_'+((currentUser&&currentUser.id)||'anon'); }
+
+// ── ОЧЕРЕДЬ НЕСИНХРОНИЗИРОВАННЫХ ОТМЕТОК ─────────────────────────────────
+// Отметка, сделанная без сети, попадает сюда и досылается при первой
+// возможности. Без очереди она терялась: loadData накатывал серверные
+// данные поверх локальных.
+function queueRead(){
+  try{ return JSON.parse(localStorage.getItem(queueKey()) || '{}'); }
+  catch(e){ return {}; }
+}
+function queueWrite(q){
+  try{ localStorage.setItem(queueKey(), JSON.stringify(q)); }
+  catch(e){ console.warn('очередь не сохранена', e); }
+}
+function queueAdd(k, val){
+  const q = queueRead();
+  q[k] = val;
+  queueWrite(q);
+  updatePendingBadge();
+}
+function queueSize(){ return Object.keys(queueRead()).length; }
+
+// Показываем в статусе, что часть изменений ещё не на сервере.
+function updatePendingBadge(){
+  const n = queueSize();
+  if(n > 0) setSyncStatus('не отправлено: ' + n, false);
+}
+
+let flushing = false;
+async function flushQueue(){
+  if(flushing || !currentUser || isDemoMode) return;
+  const q = queueRead();
+  const keys = Object.keys(q);
+  if(!keys.length) return;
+  flushing = true;
+  try{
+    // Отдельно то, что нужно записать, и то, что нужно удалить.
+    const toUpsert = keys.filter(k => q[k] === true).map(k => ({
+      id:k, user_id:currentUser.id, done:true, updated_at:new Date().toISOString()
+    }));
+    const toDelete = keys.filter(k => q[k] !== true);
+
+    if(toUpsert.length){
+      const res = await sbFetchWithTimeout(()=>
+        sb.from('habits').upsert(toUpsert, {onConflict:'id,user_id'})
+      );
+      if(res.error) throw new Error(res.error.message);
+    }
+    if(toDelete.length){
+      const res = await sbFetchWithTimeout(()=>
+        sb.from('habits').delete().eq('user_id', currentUser.id).in('id', toDelete)
+      );
+      if(res.error) throw new Error(res.error.message);
+    }
+    localStorage.removeItem(queueKey());
+    setSyncStatus('всё синхронизировано ✓', true);
+    setTimeout(()=>setSyncStatus('', false), 2000);
+  }catch(e){
+    // Очередь намеренно остаётся — попробуем при следующем событии.
+    setSyncStatus('не отправлено: ' + queueSize(), false);
+  }finally{
+    flushing = false;
+  }
+}
+
+window.addEventListener('online', flushQueue);
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) flushQueue(); });
 
 // Fetch with timeout to avoid infinite hang
 async function sbFetchWithTimeout(fn, ms=8000){
@@ -574,7 +721,12 @@ async function sbFetchWithTimeout(fn, ms=8000){
 async function loadData(){
   if(!currentUser || isDemoMode) return;
   // Show cached data instantly
-  try{ const cached=localStorage.getItem(cacheKey()); if(cached){ data=JSON.parse(cached); render(); } }catch(e){}
+  try{ const cached=localStorage.getItem(cacheKey()); if(cached){ data=JSON.parse(cached); } }catch(e){}
+  // Старые ключи переводим в новый формат сразу, ещё до обращения к сети:
+  // иначе при недоступном сервере отметки выглядели бы пропавшими.
+  ensureHabitIds();
+  let migration = migrateLocalKeys();
+  render();
   setSyncStatus('синхронизация...');
   try{
     // Load habit list first
@@ -584,22 +736,113 @@ async function loadData(){
       );
       if(settingsRes.data && settingsRes.data.value){
         const serverHabits = JSON.parse(settingsRes.data.value);
-        HABITS = serverHabits;
-        localStorage.setItem('customHabits', JSON.stringify(HABITS));
+        if(Array.isArray(serverHabits) && serverHabits.length) HABITS = serverHabits;
       }
-    }catch(e){ console.warn('settings load skipped:', e.message); }
+    }catch(e){ /* список привычек останется локальным — не критично */ }
+
+    // Список с сервера мог прийти без id — проставляем те же legacy-N.
+    const habitsChanged = ensureHabitIds();
+    localStorage.setItem('customHabits', JSON.stringify(HABITS));
 
     // Load checkbox data
     const res = await sbFetchWithTimeout(()=>
       sb.from('habits').select('id,done').eq('user_id', currentUser.id)
     );
     if(res.error){ setSyncStatus('ошибка: '+res.error.message, false); return; }
-    (res.data||[]).forEach(r=>{ if(typeof r.done==='boolean') data[r.id]=r.done; });
+
+    // Серверные данные накатываем поверх кэша, но НЕ трогаем ключи,
+    // которые ещё лежат в очереди на отправку — локальное новее.
+    const pending = queueRead();
+    (res.data||[]).forEach(r=>{
+      if(r.id in pending) return;
+      if(r.done === true) data[r.id] = true; else delete data[r.id];
+    });
     localStorage.setItem(cacheKey(), JSON.stringify(data));
+
+    // С сервера могли прийти старые ключи — переносим и их.
+    const serverMigration = migrateLocalKeys();
+    if(serverMigration){
+      if(migration){
+        Object.assign(serverMigration.moved, migration.moved);
+        serverMigration.legacy = serverMigration.legacy.concat(migration.legacy);
+      }
+      migration = serverMigration;
+    }
+    if(migration) await pushMigration(migration);
+    if(habitsChanged) await saveHabitsToServer();
+
     setSyncStatus('синхронизировано ✓', true);
     render();
+    flushQueue();
   }catch(e){
     setSyncStatus(e.message==='timeout'?'таймаут — используем кэш':'нет сети', false);
+    updatePendingBadge();
+  }
+}
+
+// ── МИГРАЦИЯ НА ПОСТОЯННЫЕ ID ────────────────────────────────────────────
+// Раньше ключ отметки был «год/месяц/день/индекс_в_массиве», поэтому
+// удаление или перетаскивание привычки сдвигало всю историю на соседнюю.
+// Теперь в ключе стоит id привычки. Старые ключи (последний сегмент —
+// число) один раз переносим на новые по текущему порядку списка.
+// Привычка без id — из версии, где id вообще не было. Её прежний номер
+// в списке и есть её identity, поэтому id детерминированный: legacy-N.
+// Благодаря этому локальный и серверный списки сходятся к одним и тем же
+// идентификаторам, в каком бы порядке они ни загрузились.
+function ensureHabitIds(){
+  let changed = false;
+  HABITS.forEach((h, i)=>{ if(!h.id){ h.id = 'legacy-' + i; changed = true; } });
+  return changed;
+}
+
+function isLegacyKey(k){
+  const parts = String(k).split('/');
+  return parts.length === 4 && /^\d+$/.test(parts[3]);
+}
+
+// Локальный перенос старых ключей. Делается независимо от сети — иначе
+// без сервера отметки просто не нашлись бы и выглядели бы потерянными.
+// Возвращает пары «новый ключ → значение» и список старых ключей.
+function migrateLocalKeys(){
+  const legacy = Object.keys(data).filter(isLegacyKey);
+  if(!legacy.length) return null;
+
+  const moved = {};
+  legacy.forEach(k=>{
+    const p = k.split('/');
+    moved[p[0]+'/'+p[1]+'/'+p[2]+'/legacy-'+p[3]] = data[k];
+    delete data[k];
+  });
+  Object.assign(data, moved);
+  try{ localStorage.setItem(cacheKey(), JSON.stringify(data)); }catch(e){}
+  return {moved, legacy};
+}
+
+// Серверная часть переноса: записать новые строки, удалить старые.
+// Если не получится — новые ключи уходят в очередь и досылаются позже.
+async function pushMigration(result){
+  if(!result || !currentUser || isDemoMode) return;
+  const {moved, legacy} = result;
+  setSyncStatus('переносим историю...');
+  try{
+    const rows = Object.keys(moved).filter(k=>moved[k] === true).map(k=>({
+      id:k, user_id:currentUser.id, done:true, updated_at:new Date().toISOString()
+    }));
+    for(let i=0; i<rows.length; i+=400){
+      const res = await sbFetchWithTimeout(()=>
+        sb.from('habits').upsert(rows.slice(i, i+400), {onConflict:'id,user_id'}), 20000);
+      if(res.error) throw new Error(res.error.message);
+    }
+    for(let i=0; i<legacy.length; i+=400){
+      const res = await sbFetchWithTimeout(()=>
+        sb.from('habits').delete().eq('user_id', currentUser.id)
+          .in('id', legacy.slice(i, i+400)), 20000);
+      if(res.error) throw new Error(res.error.message);
+    }
+    toast('История перенесена на новый формат: ' + Object.keys(moved).length + ' отметок');
+  }catch(e){
+    Object.keys(moved).forEach(k=>queueAdd(k, moved[k] === true));
+    setSyncStatus('перенос завершится при следующей синхронизации', false);
   }
 }
 
@@ -609,17 +852,28 @@ async function saveEntry(k, val){
   localStorage.setItem(cacheKey(), JSON.stringify(data));
   setSyncStatus('сохранение...');
   try{
-    const res = await sbFetchWithTimeout(()=>
-      sb.from('habits').upsert(
-        {id:k, user_id:currentUser.id, done:val, updated_at:new Date().toISOString()},
-        {onConflict:'id,user_id'}
-      )
-    );
-    if(res.error){ setSyncStatus('ошибка: '+res.error.message, false); return; }
+    // Снятая галочка удаляет строку, а не пишет done:false —
+    // иначе таблица растёт вдвое против нужного.
+    const res = val
+      ? await sbFetchWithTimeout(()=>
+          sb.from('habits').upsert(
+            {id:k, user_id:currentUser.id, done:true, updated_at:new Date().toISOString()},
+            {onConflict:'id,user_id'}
+          ))
+      : await sbFetchWithTimeout(()=>
+          sb.from('habits').delete().eq('user_id', currentUser.id).eq('id', k));
+
+    if(res.error){
+      queueAdd(k, val);
+      setSyncStatus('ошибка: '+res.error.message, false);
+      return;
+    }
     setSyncStatus('сохранено ✓', true);
-    setTimeout(()=>setSyncStatus('',false), 2000);
+    setTimeout(()=>{ if(queueSize() === 0) setSyncStatus('',false); else updatePendingBadge(); }, 2000);
   }catch(e){
-    setSyncStatus('сохранено локально', false);
+    // Нет сети или таймаут — кладём в очередь, досылка при возврате связи.
+    queueAdd(k, val);
+    setSyncStatus('сохранено локально, отправим позже', false);
   }
 }
 
@@ -633,15 +887,17 @@ function subscribeRealtime(){
       payload=>{
         const r = payload.new || payload.old;
         if(!r) return;
-        if(payload.eventType === 'DELETE') delete data[r.id];
-        else if(typeof r.done === 'boolean') data[r.id] = r.done;
+        // Ключи из очереди не трогаем — там наши, ещё не отправленные изменения.
+        if(r.id in queueRead()) return;
+        if(payload.eventType === 'DELETE' || r.done !== true) delete data[r.id];
+        else data[r.id] = true;
         localStorage.setItem(cacheKey(), JSON.stringify(data));
         setSyncStatus('обновлено ✓', true);
         render();
         setTimeout(()=>setSyncStatus('',false), 2000);
       }
     )
-    .subscribe(status=>console.log('Realtime:', status));
+    .subscribe();
 }
 
 // ── THEME ─────────────────────────────────────────────────────────────────
@@ -655,8 +911,22 @@ function toggleTheme(){
 
 // ── NAVIGATION ────────────────────────────────────────────────────────────
 let view='week', offset=0;
-const today=new Date();
-const ty=today.getFullYear(), tm=today.getMonth(), td=today.getDate();
+// Дата пересчитывается, а не фиксируется на момент загрузки: вкладка,
+// оставленная открытой вечером, после полуночи должна показывать новый день.
+let today = new Date();
+let ty = today.getFullYear(), tm = today.getMonth(), td = today.getDate();
+
+function refreshToday(){
+  const now = new Date();
+  const changed = now.getDate() !== td || now.getMonth() !== tm || now.getFullYear() !== ty;
+  today = now; ty = now.getFullYear(); tm = now.getMonth(); td = now.getDate();
+  return changed;
+}
+// Проверяем раз в минуту и при каждом возврате на вкладку.
+setInterval(()=>{ if(refreshToday()) render(); }, 60000);
+document.addEventListener('visibilitychange', ()=>{
+  if(!document.hidden && refreshToday()) render();
+});
 const DOW=['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
 const MON_S=['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
 const MON_F=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
@@ -684,30 +954,37 @@ function navTitle(days){
 }
 
 // ── STATS ─────────────────────────────────────────────────────────────────
-function getStreak(hi){
+function getStreak(hid){
   let streak = 0;
   let cur = new Date(ty, tm, td);
   // If today not marked, start counting from yesterday
-  const todayKey = dkey(cur.getFullYear(), cur.getMonth(), cur.getDate(), hi);
+  const todayKey = dkey(cur.getFullYear(), cur.getMonth(), cur.getDate(), hid);
   if(!data[todayKey]) cur.setDate(cur.getDate() - 1);
   for(let i = 0; i < 366; i++){
-    const k = dkey(cur.getFullYear(), cur.getMonth(), cur.getDate(), hi);
+    const k = dkey(cur.getFullYear(), cur.getMonth(), cur.getDate(), hid);
     if(data[k]) { streak++; cur.setDate(cur.getDate() - 1); }
     else break;
   }
   return streak;
 }
-function getMonthPct(hi){ let done=0; for(let i=1;i<=td;i++) if(data[dkey(ty,tm,i,hi)]) done++; return td?Math.round(done/td*100):0; }
-function checkAllDone(days){ const t=days.find(d=>isToday(d)); return t?HABITS.every((_,hi)=>data[dkey(t.y,t.m,t.d,hi)]):false; }
+
+// Сколько отметок накоплено по привычке — нужно для честного
+// предупреждения при удалении.
+function countMarks(hid){
+  const suffix = '/' + hid;
+  return Object.keys(data).filter(k => k.endsWith(suffix) && data[k]).length;
+}
+function getMonthPct(hid){ let done=0; for(let i=1;i<=td;i++) if(data[dkey(ty,tm,i,hid)]) done++; return td?Math.round(done/td*100):0; }
+function checkAllDone(days){ const t=days.find(d=>isToday(d)); return t?HABITS.every(h=>data[dkey(t.y,t.m,t.d,h.id)]):false; }
 
 function renderStats(days){
   let done=0,total=0,bestStreak=0,perfectDays=0;
   days.filter(d=>!isFuture(d)).forEach(day=>{
     let allDone=true;
-    HABITS.forEach((_,hi)=>{ if(data[dkey(day.y,day.m,day.d,hi)])done++; else allDone=false; total++; });
+    HABITS.forEach(h=>{ if(data[dkey(day.y,day.m,day.d,h.id)])done++; else allDone=false; total++; });
     if(allDone) perfectDays++;
   });
-  HABITS.forEach((_,hi)=>{ const s=getStreak(hi); if(s>bestStreak)bestStreak=s; });
+  HABITS.forEach(h=>{ const s=getStreak(h.id); if(s>bestStreak)bestStreak=s; });
   const pct=total?Math.round(done/total*100):0;
   document.getElementById('stats-row').innerHTML=[
     {num:done,label:'Выполнено'},{num:pct+'%',label:'Процент'},
@@ -716,22 +993,60 @@ function renderStats(days){
 }
 
 // ── TOGGLE ────────────────────────────────────────────────────────────────
-function toggle(y,m,d,hi){
-  const k=dkey(y,m,d,hi); data[k]=!data[k];
-  saveEntry(k,data[k]);
-  // Сохраняем И вертикальный скролл страницы, И горизонтальный скролл всех .month-scroll
-  const sy = window.scrollY;
-  const monthScrolls = Array.from(document.querySelectorAll('.month-scroll')).map(el => el.scrollLeft);
-  render();
-  requestAnimationFrame(()=>{
-    window.scrollTo(0, sy);
-    document.querySelectorAll('.month-scroll').forEach((el, i) => {
-      if(monthScrolls[i] !== undefined) el.scrollLeft = monthScrolls[i];
-    });
+function habitById(hid){ return HABITS.find(h => h.id === hid) || null; }
+
+// Обновляем только те точки, которых касается изменение, — раньше на каждый
+// клик перерисовывался весь список, из-за чего приходилось вручную
+// восстанавливать вертикальный и горизонтальные скроллы.
+function applyDotState(k, on, color){
+  document.querySelectorAll('[data-k="'+k+'"]').forEach(el=>{
+    el.classList.toggle('done', on);
+    el.style.background = on ? color : '';
+    el.textContent = on ? '✓' : '';
   });
-  // 1 чекбокс = 1 анимация: 50/50 рандом конфетти или фейерверк
-  if(data[k]) (Math.random() > 0.5 ? launchConfetti(false) : launchFireworks());
 }
+
+// Процент и серия в карточке конкретной привычки.
+function refreshHabitMeta(hid){
+  const h = habitById(hid);
+  if(!h) return;
+  const pct = getMonthPct(hid), streak = getStreak(hid);
+  document.querySelectorAll('[data-habit="'+hid+'"]').forEach(card=>{
+    const fill = card.querySelector('.progress-fill');
+    if(fill) fill.style.width = pct + '%';
+    card.querySelectorAll('.progress-pct, .month-pct').forEach(el=>{ el.textContent = pct + '%'; });
+    const meta = card.querySelector('.habit-meta');
+    if(meta) meta.innerHTML = streak >= 1 ? streakLabel(streak, h.color) : '';
+  });
+}
+
+function toggle(y,m,d,hid){
+  const k = dkey(y,m,d,hid);
+  const on = !data[k];
+  if(on) data[k] = true; else delete data[k];
+  saveEntry(k, on);
+
+  const h = habitById(hid);
+  applyDotState(k, on, h ? h.color : '');
+  refreshHabitMeta(hid);
+  const days = getViewDays();
+  renderStats(days);
+
+  // Праздник — за настоящий повод: закрытый целиком день.
+  // Обычная галочка получает короткую ненавязчивую анимацию.
+  if(on && !REDUCED_MOTION){
+    if(checkAllDone(days)) launchConfetti(true);
+    else launchConfetti(false);
+  }
+}
+
+// Клики по точкам обрабатываем делегированием: обработчик один на список,
+// а не inline-атрибут у каждой из сотен точек.
+document.getElementById('habits-list').addEventListener('click', e=>{
+  const dot = e.target.closest('[data-k]');
+  if(!dot || dot.classList.contains('future')) return;
+  toggle(+dot.dataset.y, +dot.dataset.m, +dot.dataset.d, dot.dataset.h);
+});
 
 // ── STREAK LABEL ─────────────────────────────────────────────────────────
 // Map hex color to hue-rotate degrees for fire emoji
@@ -760,39 +1075,15 @@ function flameVariantA(color){
     'transform:translateY(-1px)">🔥</span>';
 }
 
-// Вариант B: кастомный SVG-огонёк с градиентом (100% точность цвета привычки)
-function flameVariantB(color){
-  const lighten=(hex,p)=>{
-    const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
-    const lr=Math.min(255,Math.round(r+(255-r)*p)), lg=Math.min(255,Math.round(g+(255-g)*p)), lb=Math.min(255,Math.round(b+(255-b)*p));
-    return '#'+[lr,lg,lb].map(x=>x.toString(16).padStart(2,'0')).join('');
-  };
-  const light=lighten(color,0.45), dark=color;
-  const gid='fg-'+color.slice(1);
-  return '<svg width="14" height="16" viewBox="0 0 14 16" style="display:inline-block;vertical-align:-3px;margin-right:2px;filter:drop-shadow(0 0 2px '+color+'66)">'+
-    '<defs><linearGradient id="'+gid+'" x1="0" y1="0" x2="0" y2="1">'+
-    '<stop offset="0%" stop-color="'+light+'"/>'+
-    '<stop offset="100%" stop-color="'+dark+'"/>'+
-    '</linearGradient></defs>'+
-    '<path d="M7 0.5 C 5 3, 3 4.5, 3 7.5 C 3 9.5, 4 10.5, 4 12 C 4 11, 4.8 10.2, 5.5 10.2 C 5.5 11.5, 5 12.5, 5 13.5 C 5 14.8, 6 15.5, 7 15.5 C 8 15.5, 9 14.8, 9 13.5 C 9 12.5, 8.5 11.5, 8.5 10.2 C 9.2 10.2, 10 11, 10 12 C 10 10.5, 11 9.5, 11 7.5 C 11 4.5, 9 3, 7 0.5 Z" fill="url(#'+gid+')"/>'+
-    '</svg>';
-}
-
-// ─── ВЫБОР ВАРИАНТА ОГОНЬКА ───
-// 'A'    = эмодзи с фильтром (живой, цвет ~85-90%)
-// 'B'    = SVG-градиент (точный цвет 100%, более "плоский")
-// 'BOTH' = оба рядом для сравнения — выбери и напиши Suzuki какой оставить
-const FLAME_MODE = 'A';
-
 function streakLabel(s, color){
   if(!s || s < 1) return '';
   const n = Math.floor(s);
-  const suffix = n === 1 ? 'день' : n >= 2 && n <= 4 ? 'дня' : 'дней';
-  let flame;
-  if(FLAME_MODE === 'A') flame = flameVariantA(color);
-  else if(FLAME_MODE === 'B') flame = flameVariantB(color);
-  else flame = flameVariantA(color) + flameVariantB(color);
-  return flame + ' ' + n + ' ' + suffix;
+  // Русские окончания: 1 день, 2–4 дня, 5–20 дней, 21 день, 22 дня…
+  const t = n % 100, u = n % 10;
+  const suffix = (t >= 11 && t <= 14) ? 'дней'
+               : u === 1 ? 'день'
+               : (u >= 2 && u <= 4) ? 'дня' : 'дней';
+  return flameVariantA(color) + ' ' + n + ' ' + suffix;
 }
 
 // ── RENDER ────────────────────────────────────────────────────────────────
@@ -814,32 +1105,31 @@ function renderWeek(days){
   if(isMobile){
     hdr.style.display = 'none';
     // Mobile: each card has its own 7-col grid header + dots
-    document.getElementById('habits-list').innerHTML = HABITS.map((h,hi)=>{
-      const streak=getStreak(hi), pct=getMonthPct(hi);
+    document.getElementById('habits-list').innerHTML = HABITS.map(h=>{
+      const streak=getStreak(h.id), pct=getMonthPct(h.id);
       const cols = days.map(day=>{
-        const fut=isFuture(day), tod=isToday(day), done=!!data[dkey(day.y,day.m,day.d,hi)];
-        const oc = fut ? '' : 'onclick="toggle('+day.y+','+day.m+','+day.d+','+hi+')"';
+        const fut=isFuture(day), tod=isToday(day), done=!!data[dkey(day.y,day.m,day.d,h.id)];
         const ac = tod ? 'var(--accent)' : 'var(--text3)';
         return '<div style="display:flex;flex-direction:column;align-items:center;gap:3px">'+
           '<div style="font-size:10px;font-weight:'+(tod?600:400)+';color:'+ac+'">'+day.d+'</div>'+
           '<div style="font-size:8px;color:'+ac+';text-transform:uppercase;opacity:.8">'+DOW[day.date.getDay()]+'</div>'+
           '<div class="dot-btn'+(done?' done':'')+(fut?' future':'')+(tod&&!done?' today-hl':'')+
-            '" style="width:32px;height:32px;'+(done?'background:'+h.color:'')+'" '+oc+'>'+
+            '" style="width:32px;height:32px;'+(done?'background:'+h.color:'')+'"'+dotAttrs(day,h,fut)+'>'+
             (done?'✓':'')+
           '</div>'+
         '</div>';
       }).join('');
-      return '<div class="habit-card-week">'+
+      return '<div class="habit-card-week" data-habit="'+esc(h.id)+'">'+
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'+
-          '<div class="habit-icon" style="background:'+h.bg+';flex-shrink:0">'+h.icon+'</div>'+
+          '<div class="habit-icon" style="background:'+esc(h.bg)+';flex-shrink:0">'+esc(h.icon)+'</div>'+
           '<div style="min-width:0">'+
-            '<div class="habit-name">'+h.name+'</div>'+
-            (streak>=1?'<div class="habit-meta">'+streakLabel(streak,h.color)+'</div>':'')+
+            '<div class="habit-name">'+esc(h.name)+'</div>'+
+            '<div class="habit-meta">'+(streak>=1?streakLabel(streak,h.color):'')+'</div>'+
           '</div>'+
         '</div>'+
         '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">'+cols+'</div>'+
         '<div class="progress-wrap">'+
-          '<div class="progress-bar"><div class="progress-fill" style="width:'+pct+'%;background:'+h.color+'"></div></div>'+
+          '<div class="progress-bar"><div class="progress-fill" style="width:'+pct+'%;background:'+esc(h.color)+'"></div></div>'+
           '<div class="progress-pct">'+pct+'%</div>'+
         '</div>'+
       '</div>';
@@ -865,31 +1155,30 @@ function renderWeek(days){
     }).join('');
 
     // Each habit card: its inner grid uses the SAME COLS
-    document.getElementById('habits-list').innerHTML = HABITS.map((h,hi)=>{
-      const streak=getStreak(hi), pct=getMonthPct(hi);
+    document.getElementById('habits-list').innerHTML = HABITS.map(h=>{
+      const streak=getStreak(h.id), pct=getMonthPct(h.id);
       const dots = days.map(day=>{
-        const fut=isFuture(day), tod=isToday(day), done=!!data[dkey(day.y,day.m,day.d,hi)];
-        const oc = fut ? '' : 'onclick="toggle('+day.y+','+day.m+','+day.d+','+hi+')"';
+        const fut=isFuture(day), tod=isToday(day), done=!!data[dkey(day.y,day.m,day.d,h.id)];
         return '<div style="display:flex;justify-content:center;align-items:center">'+
           '<div class="dot-btn'+(done?' done':'')+(fut?' future':'')+(tod&&!done?' today-hl':'')+
-            '" style="'+(done?'background:'+h.color:'')+'" '+oc+'>'+
+            '" style="'+(done?'background:'+h.color:'')+'"'+dotAttrs(day,h,fut)+'>'+
             (done?'✓':'')+
           '</div>'+
         '</div>';
       }).join('');
-      return '<div class="habit-card-week">'+
+      return '<div class="habit-card-week" data-habit="'+esc(h.id)+'">'+
         '<div style="display:grid;grid-template-columns:'+COLS+';column-gap:12px;row-gap:6px;align-items:center">'+
           '<div style="display:flex;align-items:center;gap:8px;min-width:0">'+
-            '<div class="habit-icon" style="background:'+h.bg+';flex-shrink:0">'+h.icon+'</div>'+
+            '<div class="habit-icon" style="background:'+esc(h.bg)+';flex-shrink:0">'+esc(h.icon)+'</div>'+
             '<div style="min-width:0">'+
-              '<div class="habit-name">'+h.name+'</div>'+
-              (streak>=1?'<div class="habit-meta">'+streakLabel(streak,h.color)+'</div>':'')+
+              '<div class="habit-name">'+esc(h.name)+'</div>'+
+              '<div class="habit-meta">'+(streak>=1?streakLabel(streak,h.color):'')+'</div>'+
             '</div>'+
           '</div>'+
           dots+
         '</div>'+
         '<div class="progress-wrap">'+
-          '<div class="progress-bar"><div class="progress-fill" style="width:'+pct+'%;background:'+h.color+'"></div></div>'+
+          '<div class="progress-bar"><div class="progress-fill" style="width:'+pct+'%;background:'+esc(h.color)+'"></div></div>'+
           '<div class="progress-pct">'+pct+'%</div>'+
         '</div>'+
       '</div>';
@@ -897,23 +1186,33 @@ function renderWeek(days){
   }
 }
 
+// data-атрибуты точки: по ним обработчик-делегат понимает, что переключать.
+// id привычки состоит только из букв, цифр и дефисов, но esc() ставим
+// на всякий случай — если формат id когда-нибудь изменится.
+function dotAttrs(day, h, fut){
+  if(fut) return '';
+  return ' data-k="'+esc(dkey(day.y,day.m,day.d,h.id))+'"'+
+         ' data-y="'+day.y+'" data-m="'+day.m+'" data-d="'+day.d+'"'+
+         ' data-h="'+esc(h.id)+'"';
+}
+
 function renderMonth(days){
   document.getElementById('week-header').style.display='none';
-  document.getElementById('habits-list').innerHTML=HABITS.map((h,hi)=>{
-    const streak=getStreak(hi),pct=getMonthPct(hi);
+  document.getElementById('habits-list').innerHTML=HABITS.map(h=>{
+    const streak=getStreak(h.id),pct=getMonthPct(h.id);
     const cols=days.map(day=>{
-      const fut=isFuture(day),tod=isToday(day),done=!!data[dkey(day.y,day.m,day.d,hi)];
-      const oc=fut?'':'onclick="toggle('+day.y+','+day.m+','+day.d+','+hi+')"';
+      const fut=isFuture(day),tod=isToday(day),done=!!data[dkey(day.y,day.m,day.d,h.id)];
       return '<div class="month-day-col'+(tod?' today-col':'')+'">'+
         '<div class="month-day-num">'+day.d+'</div><div class="month-day-dow">'+DOW[day.date.getDay()]+'</div>'+
-        '<div class="month-dot'+(done?' done':'')+(fut?' future':'')+(tod&&!done?' today-hl':'')+'" style="'+(done?'background:'+h.color:'')+'" '+oc+'>'+(done?'✓':'')+'</div></div>';
+        '<div class="month-dot'+(done?' done':'')+(fut?' future':'')+(tod&&!done?' today-hl':'')+'" style="'+(done?'background:'+h.color:'')+'"'+dotAttrs(day,h,fut)+'>'+(done?'✓':'')+'</div></div>';
     }).join('');
-    return '<div class="month-card"><div class="month-card-header">'+
-      '<div class="habit-icon" style="background:'+h.bg+'">'+h.icon+'</div>'+
-      '<div style="flex:1;min-width:0"><div class="habit-name">'+h.name+'</div>'+(streak>=1?'<div class="habit-meta">'+streakLabel(streak,h.color)+'</div>':'')+
-      '</div><span style="font-size:12px;color:var(--text3);flex-shrink:0">'+pct+'%</span></div>'+
+    return '<div class="month-card" data-habit="'+esc(h.id)+'"><div class="month-card-header">'+
+      '<div class="habit-icon" style="background:'+esc(h.bg)+'">'+esc(h.icon)+'</div>'+
+      '<div style="flex:1;min-width:0"><div class="habit-name">'+esc(h.name)+'</div>'+
+      '<div class="habit-meta">'+(streak>=1?streakLabel(streak,h.color):'')+'</div>'+
+      '</div><span class="month-pct" style="font-size:12px;color:var(--text3);flex-shrink:0">'+pct+'%</span></div>'+
       '<div class="month-scroll"><div class="month-days-wrap">'+cols+'</div></div>'+
-      '<div class="progress-wrap" style="margin-top:8px"><div class="progress-bar"><div class="progress-fill" style="width:'+pct+'%;background:'+h.color+'"></div></div></div></div>';
+      '<div class="progress-wrap" style="margin-top:8px"><div class="progress-bar"><div class="progress-fill" style="width:'+pct+'%;background:'+esc(h.color)+'"></div></div></div></div>';
   }).join('');
 }
 
@@ -929,8 +1228,8 @@ function renderEditor(){
          'ondragend="dragEnd(event)" '+
          'ondragleave="dragLeave(event)">'+
       '<span class="drag-handle" title="Перетащи чтобы изменить порядок">⋮⋮</span>'+
-      '<button class="edit-icon-btn" onclick="openEmojiPicker('+i+',this)" title="Выбрать эмодзи">'+h.icon+'</button>'+
-      '<input class="edit-input" value="'+h.name.replace(/"/g,'&quot;')+'" oninput="editBuffer['+i+'].name=this.value" maxlength="30">'+
+      '<button class="edit-icon-btn" onclick="openEmojiPicker('+i+',this)" title="Выбрать эмодзи">'+esc(h.icon)+'</button>'+
+      '<input class="edit-input" value="'+esc(h.name)+'" oninput="editBuffer['+i+'].name=this.value" maxlength="30">'+
       '<button class="del-btn" onclick="removeHabit('+i+')">✕</button>'+
     '</div>'
   ).join('');
@@ -965,7 +1264,20 @@ function dragEnd(e){
   document.querySelectorAll('.edit-row.drop-target').forEach(r=>r.classList.remove('drop-target'));
   dragSrcIdx=null;
 }
-function removeHabit(i){ editBuffer.splice(i,1); renderEditor(); }
+// Удаление осиротит всю историю привычки, поэтому спрашиваем и показываем,
+// сколько отметок будет потеряно.
+function removeHabit(i){
+  const h = editBuffer[i];
+  if(!h) return;
+  const marks = h.id ? countMarks(h.id) : 0;
+  const question = marks > 0
+    ? 'Удалить привычку «' + h.name + '»?\n\nВместе с ней потеряется история: ' +
+      marks + ' ' + (marks % 10 === 1 && marks % 100 !== 11 ? 'отметка' : 'отметок') + '.'
+    : 'Удалить привычку «' + h.name + '»?';
+  if(!confirm(question)) return;
+  editBuffer.splice(i,1);
+  renderEditor();
+}
 
 async function addHabit(){
   const inp=document.getElementById('new-habit-input');
@@ -974,25 +1286,50 @@ async function addHabit(){
   btn.disabled=true; btn.textContent='Подбираю...';
   const icon=guessEmoji(name);
   const idx=editBuffer.length%COLOR_POOL.length;
-  editBuffer.push({name,icon,color:COLOR_POOL[idx],bg:BG_POOL[idx]});
+  // id присваивается сразу и больше никогда не меняется.
+  editBuffer.push({id:newHabitId(),name,icon,color:COLOR_POOL[idx],bg:BG_POOL[idx]});
   inp.value=''; btn.disabled=false; btn.textContent='+ Добавить';
   renderEditor();
 }
 
-async function saveHabits(){
-  HABITS=editBuffer.map(h=>Object.assign({},h));
-  localStorage.setItem('customHabits',JSON.stringify(HABITS));
-  closeModal(); render();
-  // Sync habit list to Supabase
-  if(currentUser && !isDemoMode){
-    try{
-      await sb.from('user_settings').upsert(
+// Отправка списка привычек на сервер. Клиент Supabase не бросает исключение
+// при ошибке запроса, а возвращает её в res.error — проверяем именно его,
+// иначе неудачное сохранение выглядело бы как успешное.
+async function saveHabitsToServer(){
+  if(!currentUser || isDemoMode) return true;
+  try{
+    const res = await sbFetchWithTimeout(()=>
+      sb.from('user_settings').upsert(
         {user_id: currentUser.id, key:'habits', value: JSON.stringify(HABITS), updated_at: new Date().toISOString()},
         {onConflict:'user_id,key'}
-      );
+      )
+    );
+    if(res.error){
+      setSyncStatus('привычки не сохранены: ' + res.error.message, false);
+      return false;
+    }
+    return true;
+  }catch(e){
+    setSyncStatus(e.message === 'timeout'
+      ? 'привычки не сохранены: таймаут'
+      : 'привычки не сохранены: нет сети', false);
+    return false;
+  }
+}
+
+async function saveHabits(){
+  HABITS=editBuffer.map(h=>Object.assign({},h));
+  ensureHabitIds();
+  localStorage.setItem('customHabits',JSON.stringify(HABITS));
+  closeModal(); render();
+  if(currentUser && !isDemoMode){
+    const ok = await saveHabitsToServer();
+    if(ok){
       setSyncStatus('привычки сохранены ✓', true);
       setTimeout(()=>setSyncStatus('',false), 2000);
-    }catch(e){ console.warn('habits save error', e); }
+    }else{
+      toast('Список привычек сохранён только на этом устройстве', true);
+    }
   }
 }
 
@@ -1127,34 +1464,6 @@ document.getElementById('btn-month').addEventListener('click',()=>magicSound('vi
 document.getElementById('edit-btn').addEventListener('click',()=>magicSound('edit'));
 
 // ── CONFETTI ──────────────────────────────────────────────────────────────
-function playFireworkSound(){
-  resumeAC();
-  const now = AC.currentTime;
-  // Soft rising shimmer — like distant sparkle
-  [0, 0.08, 0.16].forEach((delay, i)=>{
-    const o = AC.createOscillator(), g = AC.createGain();
-    o.type = 'sine';
-    const baseFreqs = [880, 1100, 1320];
-    o.frequency.setValueAtTime(baseFreqs[i] * 0.7, now + delay);
-    o.frequency.exponentialRampToValueAtTime(baseFreqs[i], now + delay + 0.25);
-    g.gain.setValueAtTime(0, now + delay);
-    g.gain.linearRampToValueAtTime(0.06, now + delay + 0.04);
-    g.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.35);
-    o.connect(g); g.connect(AC.destination);
-    o.start(now + delay); o.stop(now + delay + 0.4);
-  });
-  // Gentle sparkle ticks
-  [0.1, 0.2, 0.28, 0.35].forEach(t=>{
-    const o = AC.createOscillator(), g = AC.createGain();
-    o.type = 'sine';
-    o.frequency.value = 2000 + Math.random() * 1500;
-    g.gain.setValueAtTime(0.04, now + t);
-    g.gain.exponentialRampToValueAtTime(0.001, now + t + 0.07);
-    o.connect(g); g.connect(AC.destination);
-    o.start(now + t); o.stop(now + t + 0.08);
-  });
-}
-
 function playCheer(big){
   resumeAC(); const now=AC.currentTime;
   // Magical chime: C major arpeggio + sparkly fairy dust ticks
@@ -1195,45 +1504,9 @@ function playCheer(big){
 }
 let animId=null;
 
-function launchFireworks(){
-  const canvas=document.getElementById('confetti-canvas');
-  const ctx=canvas.getContext('2d');
-  canvas.width=window.innerWidth; canvas.height=window.innerHeight;
-  if(animId) cancelAnimationFrame(animId);
-  playFireworkSound();
-  const fwC=['#FFD700','#FF6B6B','#00CFFF','#B8FF4F','#FF4FCF','#FFA500','#52B788','#7F77DD'];
-  let sparks=[];
-  // 3 random burst points
-  for(let i=0;i<3;i++){
-    setTimeout(()=>{
-      const x=canvas.width*(0.2+Math.random()*0.6);
-      const y=canvas.height*(0.15+Math.random()*0.4);
-      sparks.push(...createFW(ctx,x,y,fwC[Math.floor(Math.random()*fwC.length)]));
-    }, i*180);
-  }
-  const maxF=180; let frame=0;
-  function tick(){
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    sparks.forEach(s=>{
-      s.trail.push({x:s.x,y:s.y}); if(s.trail.length>8) s.trail.shift();
-      s.x+=s.vx; s.y+=s.vy; s.vy+=0.1; s.vx*=0.98; s.opacity-=0.014;
-      if(s.opacity<=0) return;
-      s.trail.forEach((pt,ti)=>{
-        ctx.beginPath(); ctx.arc(pt.x,pt.y,s.r*(ti/s.trail.length)*0.8,0,Math.PI*2);
-        ctx.fillStyle=s.color; ctx.globalAlpha=s.opacity*(ti/s.trail.length)*0.5; ctx.fill();
-      });
-      ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
-      ctx.fillStyle=s.color; ctx.globalAlpha=Math.max(0,s.opacity); ctx.fill(); ctx.globalAlpha=1;
-    });
-    sparks=sparks.filter(s=>s.opacity>0);
-    frame++;
-    if(frame<maxF||sparks.length>0) animId=requestAnimationFrame(tick);
-    else{ ctx.clearRect(0,0,canvas.width,canvas.height); animId=null; }
-  }
-  tick();
-}
 function createFW(ctx,x,y,color){ return Array.from({length:32},()=>{ const a=Math.random()*Math.PI*2,sp=2.5+Math.random()*4; return {x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,r:2+Math.random()*2.5,color,opacity:1,trail:[]}; }); }
 function launchConfetti(big){
+  if(REDUCED_MOTION) return;
   const canvas=document.getElementById('confetti-canvas'); const ctx=canvas.getContext('2d');
   canvas.width=window.innerWidth; canvas.height=window.innerHeight;
   if(animId) cancelAnimationFrame(animId); playCheer(big);
@@ -1363,19 +1636,103 @@ function setUserAvatar(user){
   document.getElementById('user-email-display').textContent = user.email || '';
 }
 
+// ── ЭКСПОРТ И ИМПОРТ ──────────────────────────────────────────────────────
+// Пользователь должен иметь возможность забрать свои данные и перенести их.
+function exportData(){
+  document.getElementById('user-menu').classList.remove('open');
+  const payload = {
+    format: 'habit-tracker',
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    email: (currentUser && currentUser.email) || null,
+    habits: HABITS,
+    marks: data
+  };
+  try{
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const d = new Date();
+    const stamp = d.getFullYear() + '-' +
+      String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    a.href = url;
+    a.download = 'privychki-' + stamp + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 1000);
+    toast('Файл сохранён: ' + Object.keys(data).length + ' отметок');
+  }catch(e){
+    toast('Не удалось сохранить файл', true);
+  }
+}
+
+function importData(e){
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if(!file) return;
+  document.getElementById('user-menu').classList.remove('open');
+  const reader = new FileReader();
+  reader.onload = async ev=>{
+    let payload;
+    try{ payload = JSON.parse(ev.target.result); }
+    catch(err){ toast('Это не файл с данными трекера', true); return; }
+
+    if(!payload || typeof payload !== 'object' || !payload.marks){
+      toast('В файле нет отметок — проверьте, тот ли это файл', true);
+      return;
+    }
+    const incoming = Object.keys(payload.marks).filter(k => payload.marks[k] === true);
+    const hasHabits = Array.isArray(payload.habits) && payload.habits.length;
+    if(!confirm('Загрузить ' + incoming.length + ' отметок' +
+                (hasHabits ? ' и ' + payload.habits.length + ' привычек' : '') +
+                '?\n\nОни добавятся к текущим данным, ничего не удалится.')) return;
+
+    if(hasHabits){
+      // Привычки без id получают его здесь же, дубликаты по id не плодим.
+      const known = new Set(HABITS.map(h=>h.id));
+      payload.habits.forEach(h=>{
+        if(!h || !h.name) return;
+        if(!h.id) h.id = newHabitId();
+        if(!known.has(h.id)){ HABITS.push(h); known.add(h.id); }
+      });
+      localStorage.setItem('customHabits', JSON.stringify(HABITS));
+    }
+
+    incoming.forEach(k=>{ data[k] = true; queueAdd(k, true); });
+    localStorage.setItem(cacheKey(), JSON.stringify(data));
+    render();
+    toast('Загружено ' + incoming.length + ' отметок');
+
+    if(currentUser && !isDemoMode){
+      if(hasHabits) await saveHabitsToServer();
+      await flushQueue();
+    }
+  };
+  reader.onerror = ()=>toast('Не удалось прочитать файл', true);
+  reader.readAsText(file);
+}
+
 // ── INIT ──────────────────────────────────────────────────────────────────
 (async()=>{
   // Theme
   const t=localStorage.getItem('theme');
   if(t==='dark'){isDark=true;document.documentElement.setAttribute('data-theme','dark');document.getElementById('theme-btn').textContent='☀️';}
   view=(window.innerWidth<=600)?'week':(localStorage.getItem('view')||'week');
-  HABITS=JSON.parse(localStorage.getItem('customHabits')||'null')||DEFAULT_HABITS;
+  let stored = null;
+  try{ stored = JSON.parse(localStorage.getItem('customHabits')||'null'); }catch(e){}
+  HABITS = (Array.isArray(stored) && stored.length) ? stored : cloneDefaults();
+  ensureHabitIds();
   buildEmojiPicker();
   renderQuote();
 
+  // Service worker — офлайн-режим и запуск с домашнего экрана.
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('/sw.js').catch(()=>{ /* офлайн просто не включится */ });
+  }
+
   // Auth state listener
   sb.auth.onAuthStateChange(async(event, session)=>{
-    console.log('Auth event:', event, session?.user?.email);
     if(event === 'SIGNED_OUT'){
       currentUser = null;
       data = {};
@@ -1390,7 +1747,7 @@ function setUserAvatar(user){
       if(isNewUser){
         // Clear previous user's cached habits before loading new user's data
         data = {};
-        HABITS = DEFAULT_HABITS;
+        HABITS = cloneDefaults();
         localStorage.removeItem('customHabits');
       }
       showScreen('app');
@@ -1403,8 +1760,7 @@ function setUserAvatar(user){
   });
 
   // Check existing session on load
-  const {data:{session}, error:sessErr} = await sb.auth.getSession();
-  console.log('Initial session:', session?.user?.email, sessErr);
+  const {data:{session}} = await sb.auth.getSession();
   // Now safe to clear hash — Supabase already read the token
   if(window.location.hash && window.location.hash.includes('access_token')){
     history.replaceState(null, '', window.location.pathname);
@@ -1414,7 +1770,7 @@ function setUserAvatar(user){
     setUserAvatar(currentUser);
     // Reset to defaults — loadData will fill from server
     data = {};
-    HABITS = DEFAULT_HABITS;
+    HABITS = cloneDefaults();
     showScreen('app');
     render();
     await loadData();
@@ -1426,11 +1782,18 @@ function setUserAvatar(user){
 
 /* ═══════════════ ✨ DISNEY MAGIC — JS ═══════════════ */
 (function magic(){
+  // При включённой системной настройке «уменьшить движение» декоративный
+  // слой не создаём вовсе — он же и самый тяжёлый для слабых устройств.
+  if(REDUCED_MOTION) return;
+
   document.body.classList.add('magic-cursor');
 
-  // Искорки за курсором
+  // Искорки за курсором. На сенсорных экранах курсора нет, поэтому там
+  // обработчик не вешаем — иначе он впустую создаёт DOM при прокрутке.
+  const hasCursor = !(window.matchMedia && window.matchMedia('(hover: none)').matches);
+
   let lastSpark = 0;
-  document.addEventListener('mousemove', function(e){
+  if(hasCursor) document.addEventListener('mousemove', function(e){
     const now = Date.now();
     if(now - lastSpark < 60) return;
     lastSpark = now;
