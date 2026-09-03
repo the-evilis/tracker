@@ -18,18 +18,21 @@
 <link rel="apple-touch-icon" href="/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
+<!-- preconnect должен идти ДО запроса шрифтов, иначе он бесполезен -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-  /* Inter только на названия привычек */
-  .habit-name {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    letter-spacing: -0.011em;
-  }
+  /* Названия привычек набраны тем же DM Sans, что и весь интерфейс:
+     отдельная загрузка Inter ради одного класса не окупалась. */
+  .habit-name { letter-spacing: -0.011em; }
 
 :root {
   --bg:#F7F5F0; --surface:#FFF; --surface2:#F0EDE6; --border:rgba(0,0,0,0.08);
-  --text:#1A1814; --text2:#6B6760; --text3:#A8A49E; --accent:#2D6A4F;
+  /* text3 — самые мелкие подписи (даты, дни недели, проценты).
+     Прежний #A8A49E давал контраст ~2.3:1 при норме WCAG AA 4.5:1. */
+  --text:#1A1814; --text2:#6B6760; --text3:#7D7871; --accent:#2D6A4F;
   --quote-bg:#2D6A4F;
   --serif:'Instrument Serif',Georgia,serif; --sans:'DM Sans',sans-serif;
   --radius:16px; --radius-sm:10px;
@@ -37,7 +40,7 @@
 }
 [data-theme="dark"] {
   --bg:#111210; --surface:#1C1C1A; --surface2:#2A2A27; --border:rgba(255,255,255,0.10);
-  --text:#F0EDE6; --text2:#C0BCB5; --text3:#908C86; --accent:#52B788;
+  --text:#F0EDE6; --text2:#C0BCB5; --text3:#A6A29B; --accent:#52B788;
   --quote-bg:#5B9BD5;
   --shadow:0 1px 3px rgba(0,0,0,0.3),0 4px 16px rgba(0,0,0,0.2);
 }
@@ -58,8 +61,6 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--sans);color:va
 .auth-btn{width:100%;padding:13px;border-radius:12px;border:none;background:var(--accent);color:#fff;font-family:var(--sans);font-size:14px;font-weight:500;cursor:pointer;transition:opacity .2s;margin-bottom:8px}
 .auth-btn:hover{opacity:.88}
 .auth-btn:disabled{opacity:.5;cursor:default}
-.auth-divider{display:flex;align-items:center;gap:12px;margin:16px 0;color:var(--text3);font-size:12px}
-.auth-divider::before,.auth-divider::after{content:'';flex:1;height:1px;background:var(--border)}
 .google-btn{width:100%;padding:12px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-family:var(--sans);font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:background .2s}
 .google-btn:hover{background:var(--surface2)}
 .google-btn svg{flex-shrink:0}
@@ -111,15 +112,21 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--sans);color:va
 
 /* ── WEEK ── */
 .week-grid-header{margin-bottom:6px}
-.day-col{text-align:center}
 .day-num{font-size:13px;font-weight:500;color:var(--text)}
 .day-name{font-size:10px;color:var(--text3);letter-spacing:.04em;text-transform:uppercase}
-.day-col.today .day-num,.day-col.today .day-name{color:var(--accent);font-weight:600}
 .habits-list{display:flex;flex-direction:column;gap:8px}
 .habit-card-week{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 14px 14px;box-shadow:var(--shadow)}
-.week-row{display:grid;gap:6px;align-items:center}
-.habit-label{display:flex;align-items:center;gap:8px;min-width:0}
-.habit-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+/* Подложка иконки выводится из цвета привычки, а не задаётся отдельным
+   светлым тоном: иначе в тёмной теме девять почти белых плашек становятся
+   самым ярким пятном на экране. */
+.habit-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;
+  background:color-mix(in srgb, var(--habit,#7F77DD) 15%, transparent)}
+[data-theme="dark"] .habit-icon{background:color-mix(in srgb, var(--habit,#7F77DD) 26%, transparent)}
+/* Запасной вариант для браузеров без color-mix — прежние светлые тона. */
+@supports not (background: color-mix(in srgb, red 10%, transparent)){
+  .habit-icon{background:var(--habit-bg,#EEEDFE)}
+  [data-theme="dark"] .habit-icon{background:var(--habit,#7F77DD);opacity:.85}
+}
 .habit-name{font-size:14px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .habit-meta{font-size:11px;color:var(--text3);margin-top:1px}
 .dot-btn{width:36px;height:36px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:white;transition:all .15s}
@@ -141,12 +148,15 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--sans);color:va
 .month-scroll::-webkit-scrollbar-track{background:var(--surface2);border-radius:3px}
 .month-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 .month-scroll::-webkit-scrollbar-thumb:hover{background:var(--text3)}
-.demo-banner{display:none!important}
 .month-days-wrap{display:inline-flex;gap:4px;min-width:max-content}
-.month-day-col{display:flex;flex-direction:column;align-items:center;gap:3px;width:30px}
-.month-day-num{font-size:9px;font-weight:500;color:var(--text3);line-height:1}
-.month-day-dow{font-size:8px;color:var(--text3);opacity:.7;line-height:1;text-transform:uppercase}
-.month-dot{width:28px;height:28px;border-radius:7px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:white;transition:all .12s;flex-shrink:0}
+.month-day-col{display:flex;flex-direction:column;align-items:center;gap:3px;width:32px}
+.month-day-num{font-size:10px;font-weight:500;color:var(--text3);line-height:1}
+.month-day-dow{font-size:10px;color:var(--text3);opacity:.85;line-height:1;text-transform:uppercase}
+.month-dot{width:28px;height:28px;border-radius:7px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:white;transition:all .12s;flex-shrink:0;position:relative}
+/* Точка остаётся маленькой визуально, а зона касания расширена до 36×44.
+   По горизонтали ровно до соседа (шаг колонки 36px): больше нельзя,
+   иначе зоны перекроются и промахов станет только больше. */
+.month-dot::after{content:'';position:absolute;inset:-8px -4px;border-radius:12px}
 .month-dot.done{border-color:transparent;transform:scale(1.06)}
 .month-dot.future{opacity:.2;cursor:default;pointer-events:none}
 .month-dot.today-hl:not(.done){border:1.5px solid var(--accent)}
@@ -175,7 +185,6 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--sans);color:va
 .btn-secondary{background:var(--surface2);color:var(--text)}
 .btn:hover{opacity:.85}
 .btn:disabled{opacity:.5;cursor:default}
-.ai-badge{font-size:10px;background:var(--accent);color:#fff;padding:2px 6px;border-radius:4px;margin-left:6px;opacity:.8}
 
 /* ── EMOJI PICKER ── */
 .emoji-picker{position:absolute;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.15);padding:10px;z-index:2000;display:none;width:220px;flex-wrap:wrap;gap:2px}
@@ -201,26 +210,17 @@ body.magic-cursor *, body.magic-cursor{cursor:url("data:image/svg+xml;utf8,<svg 
 /* magic-fade удалён */
 .dot-btn:not(.future):not(.done):hover{box-shadow:0 0 12px rgba(255,208,96,0.6),0 0 24px rgba(255,208,96,0.3)}
 .dot-btn.done:hover{box-shadow:0 0 16px currentColor,0 0 28px rgba(255,255,255,0.3);filter:brightness(1.1)}
-.habit-card-week:hover,.habit-card-month:hover{box-shadow:0 6px 24px rgba(127,119,221,0.18),0 2px 8px rgba(0,0,0,0.06);transform:translateY(-1px);transition:all .3s ease}
+.habit-card-week:hover,.month-card:hover{box-shadow:0 6px 24px rgba(127,119,221,0.18),0 2px 8px rgba(0,0,0,0.06);transform:translateY(-1px);transition:all .3s ease}
 .stat:hover{box-shadow:0 4px 18px rgba(255,208,96,0.25);transform:translateY(-2px);transition:all .3s ease}
 .app-title{position:relative;display:inline-block}
 .app-title::after{content:'✨';position:absolute;top:-8px;right:-18px;font-size:14px;animation:titleSparkle 2.5s ease-in-out infinite;pointer-events:none}
 @keyframes titleSparkle{0%,100%{transform:scale(1) rotate(0deg);opacity:0.6}50%{transform:scale(1.3) rotate(20deg);opacity:1}}
-.quote-box{position:relative;overflow:hidden}
-.quote-box::before{content:'';position:absolute;top:0;left:-100%;width:60%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.25),transparent);animation:quoteSweep 6s ease-in-out infinite;pointer-events:none}
-@keyframes quoteSweep{0%,80%{left:-60%}90%{left:100%}100%{left:100%}}
-body.dark .night-stars{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;opacity:1}
-body:not(.dark) .night-stars{display:none}
+/* Тема ставится атрибутом data-theme на <html>; прежние правила ждали
+   класс dark на <body>, который никто не назначал, — звёзды не показывались. */
+[data-theme="dark"] .night-stars{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;opacity:1}
+:root:not([data-theme="dark"]) .night-stars{display:none}
 .night-star{position:absolute;background:#FFF;border-radius:50%;animation:twinkle 3s ease-in-out infinite}
 @keyframes twinkle{0%,100%{opacity:0.15;transform:scale(0.8)}50%{opacity:0.9;transform:scale(1.2)}}
-.pixie-dust{position:fixed;top:50%;left:50%;width:0;height:0;pointer-events:none;z-index:9998}
-.pixie-particle{position:absolute;width:6px;height:6px;border-radius:50%;background:radial-gradient(circle,#FFF4D0 0%,#FFD060 40%,#FF9F1C 80%,transparent);animation:pixieFly 1.8s cubic-bezier(0.16,1,0.3,1) forwards}
-@keyframes pixieFly{0%{transform:translate(0,0) scale(0);opacity:0}10%{opacity:1;transform:translate(0,0) scale(1.2)}100%{transform:translate(var(--px),var(--py)) scale(0);opacity:0}}
-.magic-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:10000;pointer-events:none}
-.magic-overlay.show{display:flex;animation:overlayPulse 2s ease-out}
-.magic-text{font-size:48px;font-weight:800;background:linear-gradient(135deg,#FFD060,#FF9F1C,#D4537E,#7F77DD);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-shadow:0 0 40px rgba(255,208,96,0.6);animation:magicGlow 2s ease-out;text-align:center;padding:0 20px}
-@keyframes overlayPulse{0%{backdrop-filter:blur(0)}30%{backdrop-filter:blur(2px)}100%{backdrop-filter:blur(0)}}
-@keyframes magicGlow{0%{transform:scale(0.3) rotate(-10deg);opacity:0}25%{transform:scale(1.1) rotate(2deg);opacity:1}50%{transform:scale(1) rotate(0)}100%{transform:scale(1.4);opacity:0}}
 
 /* ── Уважение к настройке «уменьшить движение» ──
    Системная настройка ОС; её включают люди с вестибулярными нарушениями.
@@ -232,7 +232,7 @@ body:not(.dark) .night-stars{display:none}
     transition-duration:.01ms!important;
     scroll-behavior:auto!important;
   }
-  .night-stars,.spark,.pixie-dust{display:none!important}
+  .night-stars,.spark{display:none!important}
   #confetti-canvas{display:none!important}
 }
 
@@ -248,10 +248,101 @@ body:not(.dark) .night-stars{display:none}
 /* ── Значок «есть несохранённые изменения» ── */
 .pending-dot{display:inline-block;width:6px;height:6px;border-radius:50%;
   background:#D97706;margin-right:5px;vertical-align:middle}
+
+/* ── Видимый фокус для клавиатуры ──
+   Раньше не было ни одного правила: человек, идущий табом, не понимал,
+   где находится. Мышь фокус не рисует — только :focus-visible. */
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.dot-btn:focus-visible,.month-dot:focus-visible,.year-dot:focus-visible{outline-offset:3px}
+
+/* ── Баннер демо-режима ──
+   Раньше был скрыт правилом display:none!important, и человек не знал,
+   что его отметки никуда не сохранятся. */
+.demo-banner{position:fixed;left:0;right:0;bottom:0;z-index:900;
+  display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;
+  padding:11px 16px;background:var(--text);color:var(--bg);
+  font-size:13px;font-family:var(--sans);text-align:center;
+  box-shadow:0 -4px 20px rgba(0,0,0,.18)}
+.demo-banner button{padding:6px 16px;border-radius:100px;border:none;cursor:pointer;
+  background:var(--accent);color:#fff;font-family:var(--sans);font-size:13px;font-weight:500}
+.demo-banner button:hover{opacity:.9}
+
+/* ── Пустое состояние ── */
+.empty{text-align:center;padding:56px 24px;color:var(--text2)}
+.empty-emoji{font-size:44px;margin-bottom:14px}
+.empty h3{font-family:var(--serif);font-size:23px;font-weight:400;font-style:italic;
+  color:var(--text);margin-bottom:8px}
+.empty p{font-size:14px;color:var(--text3);margin-bottom:20px;max-width:34ch;
+  margin-left:auto;margin-right:auto}
+
+/* ── Годовой вид: плитка по неделям ── */
+.year-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:16px 14px;box-shadow:var(--shadow);margin-bottom:8px}
+.year-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.year-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px}
+.year-grid{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,11px);
+  gap:3px;min-width:max-content}
+.year-dot{width:11px;height:11px;border-radius:3px;background:var(--surface2);
+  border:none;padding:0;cursor:pointer;transition:transform .1s}
+.year-dot.out{opacity:.25;cursor:default;pointer-events:none}
+.year-dot.done{transform:scale(1.05)}
+.year-dot:hover:not(.out){outline:1.5px solid var(--accent);outline-offset:1px}
+.year-months{display:grid;grid-auto-flow:column;gap:3px;min-width:max-content;
+  font-size:9.5px;color:var(--text3);margin-bottom:4px;letter-spacing:.02em}
+.year-legend{display:flex;align-items:center;gap:6px;justify-content:flex-end;
+  font-size:11px;color:var(--text3);margin-top:10px}
+.year-legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+
+/* ── Частота и цель привычки в редакторе ── */
+.edit-row{flex-wrap:wrap}
+.edit-extra{display:flex;gap:8px;align-items:center;width:100%;
+  padding:0 0 8px 30px;flex-wrap:wrap}
+.edit-select,.edit-num{padding:5px 8px;border-radius:8px;border:1px solid var(--border);
+  background:var(--surface2);color:var(--text);font-family:var(--sans);font-size:12px;outline:none}
+.edit-select:focus,.edit-num:focus{border-color:var(--accent)}
+.edit-num{width:64px}
+.dow-pick{display:flex;gap:3px}
+.dow-btn{width:26px;height:26px;border-radius:7px;border:1px solid var(--border);
+  background:var(--surface2);color:var(--text3);font-family:var(--sans);font-size:11px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.dow-btn.on{background:var(--accent);border-color:transparent;color:#fff;font-weight:500}
+.hint{font-size:11.5px;color:var(--text3)}
+
+/* ── День вне графика привычки ── */
+.dot-btn.offplan:not(.done),.month-dot.offplan:not(.done){
+  border-style:dashed;opacity:.55}
+
+/* ── Частичное выполнение количественной привычки ── */
+.dot-btn.partial,.month-dot.partial{position:relative;overflow:hidden}
+.dot-btn.partial::before,.month-dot.partial::before{
+  content:'';position:absolute;left:0;bottom:0;width:100%;
+  height:var(--fill,0%);background:var(--habit,var(--accent));opacity:.55}
+.dot-num{position:relative;font-size:10px;font-weight:600;color:var(--text2)}
+.dot-btn.done .dot-num,.month-dot.done .dot-num{color:#fff}
+
+/* ── Архив привычек ── */
+.arch-head{font-size:12px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--text3);margin:18px 0 8px}
+.arch-row{display:flex;align-items:center;gap:8px;padding:7px 0;
+  border-bottom:1px solid var(--border);font-size:13px;color:var(--text2)}
+.arch-row:last-child{border-bottom:none}
+.arch-row .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.arch-btn{padding:4px 10px;border-radius:8px;border:1px solid var(--border);
+  background:var(--surface2);color:var(--text);font-family:var(--sans);font-size:12px;cursor:pointer}
+.arch-btn:hover{background:var(--border)}
+
+/* ── Подпись периода и знаменатель в статистике ── */
+.stats-period{font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--text3);margin-bottom:7px}
+.stat-of{font-family:var(--sans);font-size:12px;color:var(--text3);
+  letter-spacing:0;text-transform:none}
+
+/* ── Кнопка отмены в уведомлении ── */
+.toast .undo{margin-left:12px;background:none;border:1px solid currentColor;
+  color:inherit;border-radius:8px;padding:3px 11px;font-family:var(--sans);
+  font-size:12px;cursor:pointer;pointer-events:auto}
+.toast.act{pointer-events:auto}
 </style>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
 <canvas id="confetti-canvas"></canvas>
@@ -313,6 +404,7 @@ body:not(.dark) .night-stars{display:none}
         maxlength="30" onkeydown="if(event.key==='Enter')addHabit()">
       <button class="btn btn-primary" id="add-habit-btn" onclick="addHabit()">+ Добавить</button>
     </div>
+    <div id="archive-block"></div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal()">Отмена</button>
       <button class="btn btn-primary" onclick="saveHabits()">Сохранить</button>
@@ -321,9 +413,9 @@ body:not(.dark) .night-stars{display:none}
 </div>
 
 <!-- DEMO BANNER -->
-<div id="demo-banner" class="demo-banner" style="display:none">
-  <span>👁 Демо-режим — данные не сохраняются</span>
-  <button onclick="showScreen('auth');isDemoMode=false;document.getElementById('demo-banner').style.display='none'">Войти</button>
+<div id="demo-banner" class="demo-banner" style="display:none" role="status">
+  <span>👁 Демо-режим: история заполнена для примера, изменения не сохранятся</span>
+  <button onclick="leaveDemo()">Войти и сохранять</button>
 </div>
 
 <!-- MAIN APP -->
@@ -335,8 +427,9 @@ body:not(.dark) .night-stars{display:none}
       <div id="sync-status"></div>
     </div>
     <div class="header-btns">
-      <button class="icon-btn" id="edit-btn" onclick="openModal()" title="Редактировать привычки"><span style="font-size:20px;line-height:1">⚙️</span></button>
-      <button class="icon-btn" id="theme-btn" onclick="toggleTheme()">🌙</button>
+      <button class="icon-btn" id="edit-btn" onclick="openModal()" title="Редактировать привычки" aria-label="Редактировать привычки"><span style="font-size:20px;line-height:1">⚙️</span></button>
+      <button class="icon-btn" id="sound-btn" onclick="toggleSound()" title="Звук" aria-label="Включить или выключить звук">🔔</button>
+      <button class="icon-btn" id="theme-btn" onclick="toggleTheme()" title="Тема" aria-label="Переключить тему">🌙</button>
       <div class="user-avatar" id="user-avatar" onclick="toggleUserMenu(event)">
         <div class="user-menu" id="user-menu">
           <div class="user-email" id="user-email-display"></div>
@@ -361,15 +454,17 @@ body:not(.dark) .night-stars{display:none}
 
   </div>
 
+  <div class="stats-period" id="stats-period"></div>
   <div class="stats-row" id="stats-row"></div>
 
   <div class="nav">
-    <button class="nav-btn" id="btn-prev" onclick="navigate(-1)">←</button>
+    <button class="nav-btn" id="btn-prev" onclick="navigate(-1)" aria-label="Назад">←</button>
     <span class="nav-title" id="nav-title"></span>
-    <button class="nav-btn" id="btn-next" onclick="navigate(1)">→</button>
-    <div class="view-toggle">
-      <button class="view-btn" id="btn-week" onclick="setView('week')">Нед.</button>
-      <button class="view-btn" id="btn-month" onclick="setView('month')">Мес.</button>
+    <button class="nav-btn" id="btn-next" onclick="navigate(1)" aria-label="Вперёд">→</button>
+    <div class="view-toggle" role="tablist" aria-label="Период">
+      <button class="view-btn" id="btn-week" onclick="setView('week')" role="tab">Нед.</button>
+      <button class="view-btn" id="btn-month" onclick="setView('month')" role="tab">Мес.</button>
+      <button class="view-btn" id="btn-year" onclick="setView('year')" role="tab">Год</button>
     </div>
   </div>
 
@@ -382,11 +477,41 @@ body:not(.dark) .night-stars{display:none}
 // ── DEMO MODE ─────────────────────────────────────────────────────────────
 let isDemoMode = false;
 
+// Демо наполняется правдоподобной историей: на пустой сетке не видно ни
+// серий, ни процентов, ни смысла приложения — а именно за этим в демо и идут.
+function seedDemoData(){
+  data = {};
+  marksValues = {};
+  const rnd = (seed)=>{ const x = Math.sin(seed) * 10000; return x - Math.floor(x); };
+  HABITS.forEach((h, hi)=>{
+    // У каждой привычки своя дисциплинированность: от 55% до 92%.
+    const rate = 0.55 + rnd(hi + 1) * 0.37;
+    const cur = new Date(ty, tm, td);
+    cur.setDate(cur.getDate() - 74);
+    for(let i = 0; i < 75; i++){
+      const day = dayObj(cur);
+      if(isPlannedDay(h, day) && rnd(hi * 97 + i * 13 + 3) < rate){
+        data[dkey(day.y, day.m, day.d, h.id)] = true;
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+  });
+}
+
+function leaveDemo(){
+  isDemoMode = false;
+  data = {};
+  marksValues = {};
+  HABITS = cloneDefaults();
+  document.getElementById('demo-banner').style.display = 'none';
+  showScreen('auth');
+}
+
 function enterDemo(){
   isDemoMode = true;
   currentUser = null;
-  data = {};
   HABITS = cloneDefaults();
+  seedDemoData();
   document.getElementById('demo-banner').style.display = 'flex';
   // Set demo avatar
   const av = document.getElementById('user-avatar');
@@ -506,14 +631,32 @@ const REDUCED_MOTION = window.matchMedia &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // Короткое всплывающее сообщение (экспорт, импорт, ошибки).
+// Третий аргумент делает его действием с кнопкой «Вернуть».
 let toastTimer = null;
-function toast(msg, isError){
+let undoAction = null;
+
+function toast(msg, isError, onUndo){
   const el = document.getElementById('toast');
   if(!el) return;
+  undoAction = onUndo || null;
   el.textContent = msg;
-  el.className = 'toast show' + (isError ? ' err' : '');
+  if(onUndo){
+    const b = document.createElement('button');
+    b.className = 'undo';
+    b.type = 'button';
+    b.textContent = 'Вернуть';
+    b.onclick = ()=>{
+      const act = undoAction;
+      undoAction = null;
+      el.className = 'toast';
+      if(act) act();
+    };
+    el.appendChild(b);
+  }
+  el.className = 'toast show' + (isError ? ' err' : '') + (onUndo ? ' act' : '');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(()=>{ el.className = 'toast'; }, isError ? 5000 : 2600);
+  toastTimer = setTimeout(()=>{ el.className = 'toast'; undoAction = null; },
+                          onUndo ? 7000 : (isError ? 5000 : 2600));
 }
 
 // Идентификатор привычки: буквы/цифры/дефис, никогда не чисто число —
@@ -759,6 +902,9 @@ async function loadData(){
     });
     localStorage.setItem(cacheKey(), JSON.stringify(data));
 
+    // Числа количественных привычек лежат отдельно от галочек.
+    await loadValuesFromServer();
+
     // С сервера могли прийти старые ключи — переносим и их.
     const serverMigration = migrateLocalKeys();
     if(serverMigration){
@@ -907,6 +1053,35 @@ function toggleTheme(){
   document.documentElement.setAttribute('data-theme',isDark?'dark':'light');
   document.getElementById('theme-btn').textContent=isDark?'☀️':'🌙';
   localStorage.setItem('theme',isDark?'dark':'light');
+  if(typeof buildStars === 'function') buildStars();
+}
+
+// ── ЗВУК ──────────────────────────────────────────────────────────────────
+// Звук включён по умолчанию, но теперь его можно выключить: раньше каждая
+// галочка играла аккорд, а переключателя не было вовсе.
+let soundOn = true;
+
+function applySoundBtn(){
+  const b = document.getElementById('sound-btn');
+  if(!b) return;
+  b.textContent = soundOn ? '🔔' : '🔕';
+  b.title = soundOn ? 'Звук включён' : 'Звук выключен';
+  b.setAttribute('aria-pressed', soundOn ? 'true' : 'false');
+}
+
+function toggleSound(){
+  soundOn = !soundOn;
+  try{ localStorage.setItem('soundOn', soundOn ? '1' : '0'); }catch(e){}
+  applySoundBtn();
+  toast(soundOn ? 'Звук включён' : 'Звук выключен');
+  if(soundOn) magicSound('view');
+}
+
+function initSound(){
+  let saved = null;
+  try{ saved = localStorage.getItem('soundOn'); }catch(e){}
+  soundOn = saved === null ? true : saved === '1';
+  applySoundBtn();
 }
 
 // ── NAVIGATION ────────────────────────────────────────────────────────────
@@ -932,10 +1107,50 @@ const MON_S=['янв','фев','мар','апр','май','июн','июл','а�
 const MON_F=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 
 function setView(v){ view=v; offset=0; localStorage.setItem('view',v); render(); }
-function navigate(d){ offset+=d; render(); }
+function navigate(d){ if(view==='year') return; offset+=d; render(); }
+
+// ── СВАЙПЫ ────────────────────────────────────────────────────────────────
+// На телефоне листать недели маленькими стрелками в шапке неудобно.
+// Свайп внутри горизонтальных лент (месяц, год) не перехватываем — там
+// он двигает саму ленту.
+(function initSwipe(){
+  let x0 = null, y0 = null, inScroller = false;
+  const app = document.getElementById('main-app');
+  if(!app) return;
+
+  app.addEventListener('touchstart', e=>{
+    if(e.touches.length !== 1){ x0 = null; return; }
+    inScroller = !!e.target.closest('.month-scroll, .year-scroll');
+    x0 = e.touches[0].clientX;
+    y0 = e.touches[0].clientY;
+  }, {passive:true});
+
+  app.addEventListener('touchend', e=>{
+    if(x0 === null || inScroller || view === 'year') return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - x0, dy = t.clientY - y0;
+    x0 = null;
+    // Порог по X и требование, чтобы жест был именно горизонтальным.
+    if(Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+    navigate(dx < 0 ? 1 : -1);
+    magicSound('nav');
+  }, {passive:true});
+})();
 function getDIM(y,m){ return new Date(y,m+1,0).getDate(); }
 
 function getViewDays(){
+  if(view==='year'){
+    // Скользящее окно в 365 дней: у годового вида нет «предыдущего года»,
+    // стрелки для него скрыты.
+    const out = [];
+    const cur = new Date(ty, tm, td);
+    cur.setDate(cur.getDate() - 364);
+    for(let i = 0; i < 365; i++){
+      out.push(dayObj(cur));
+      cur.setDate(cur.getDate() + 1);
+    }
+    return out;
+  }
   if(view==='week'){
     const base=new Date(ty,tm,td); base.setDate(base.getDate()+offset*7);
     const mon=new Date(base); const dow=mon.getDay()||7; mon.setDate(mon.getDate()-dow+1);
@@ -949,24 +1164,126 @@ function isToday(day){ return day.y===ty&&day.m===tm&&day.d===td; }
 function isFuture(day){ return new Date(day.y,day.m,day.d)>new Date(ty,tm,td); }
 
 function navTitle(days){
+  if(view==='year') return 'Последние 12 месяцев';
   if(view==='week'){ const f=days[0],l=days[6]; return f.m===l.m?f.d+'–'+l.d+' '+MON_F[f.m]:f.d+' '+MON_F[f.m].slice(0,3)+' – '+l.d+' '+MON_F[l.m].slice(0,3); }
   const b=new Date(ty,tm+offset,1); return MON_F[b.getMonth()]+' '+b.getFullYear();
 }
 
+// ── ГРАФИК ПРИВЫЧКИ ───────────────────────────────────────────────────────
+// Привычка больше не обязана быть ежедневной. Раньше «тренировка 3 раза
+// в неделю» обнуляла серию каждый вторник и показывала 43% — приложение
+// наказывало за правильно составленный план.
+//
+//   {type:'daily'}                      — каждый день
+//   {type:'weekdays', days:[1,3,5]}     — по дням недели (0 = воскресенье)
+//   {type:'times_per_week', n:3}        — N раз в неделю, дни любые
+function habitSchedule(h){
+  const s = h && h.schedule;
+  if(!s || !s.type) return {type:'daily'};
+  if(s.type === 'weekdays'){
+    const days = Array.isArray(s.days) ? s.days.filter(d=>d>=0&&d<=6) : [];
+    return days.length ? {type:'weekdays', days} : {type:'daily'};
+  }
+  if(s.type === 'times_per_week'){
+    const n = Math.min(7, Math.max(1, parseInt(s.n,10) || 1));
+    return {type:'times_per_week', n};
+  }
+  return {type:'daily'};
+}
+
+// Ждём ли мы отметку в этот день. Для «N раз в неделю» плановых дней нет —
+// подходит любой, поэтому такие дни не помечаем как внеплановые.
+function isPlannedDay(h, day){
+  const s = habitSchedule(h);
+  if(s.type === 'weekdays') return s.days.indexOf(day.date.getDay()) !== -1;
+  return true;
+}
+
+function scheduleLabel(h){
+  const s = habitSchedule(h);
+  if(s.type === 'daily') return 'каждый день';
+  if(s.type === 'times_per_week') return s.n + ' раз' + (s.n>=2&&s.n<=4?'а':'') + ' в неделю';
+  const NM = ['вс','пн','вт','ср','чт','пт','сб'];
+  return s.days.slice().sort().map(d=>NM[d]).join(', ');
+}
+
+function activeHabits(){ return HABITS.filter(h => !h.archived); }
+function archivedHabits(){ return HABITS.filter(h => h.archived); }
+
+// ── КОЛИЧЕСТВЕННЫЕ ПРИВЫЧКИ ───────────────────────────────────────────────
+// У привычки может быть цель («8 стаканов», «20 страниц»). Само число живёт
+// отдельно от галочек: колонка done в базе булева, менять её схему ради
+// этого не пришлось. Значения синхронизируются как один JSON в user_settings.
+let marksValues = {};
+
+function habitTarget(h){
+  const t = h && parseInt(h.target, 10);
+  return (t && t > 1) ? t : 0;
+}
+function getValue(k){ const v = marksValues[k]; return typeof v === 'number' ? v : 0; }
+function setValue(k, v){
+  if(v > 0) marksValues[k] = v; else delete marksValues[k];
+  try{ localStorage.setItem(valuesKey(), JSON.stringify(marksValues)); }catch(e){}
+}
+function valuesKey(){ return 'htv_'+((currentUser&&currentUser.id)||'anon'); }
+
 // ── STATS ─────────────────────────────────────────────────────────────────
+function dayObj(date){
+  return {y:date.getFullYear(), m:date.getMonth(), d:date.getDate(), date:new Date(date)};
+}
+
+// Понедельник недели, сдвинутой на weeksAgo назад от сегодняшней.
+function mondayOf(weeksAgo){
+  const base = new Date(ty, tm, td);
+  base.setDate(base.getDate() - weeksAgo * 7);
+  const dow = base.getDay() || 7;
+  base.setDate(base.getDate() - dow + 1);
+  base.setHours(0,0,0,0);
+  return base;
+}
+
+function doneInWeek(h, weeksAgo){
+  const mon = mondayOf(weeksAgo);
+  let n = 0;
+  for(let i = 0; i < 7; i++){
+    const c = new Date(mon); c.setDate(c.getDate() + i);
+    if(data[dkey(c.getFullYear(), c.getMonth(), c.getDate(), h.id)]) n++;
+  }
+  return n;
+}
+
+// Серия. Для «N раз в неделю» считается в неделях, иначе в плановых днях.
+// Незаконченный сегодняшний день (и текущая неделя) серию не обрывают.
 function getStreak(hid){
+  const h = typeof hid === 'object' ? hid : habitById(hid);
+  if(!h) return 0;
+  const s = habitSchedule(h);
+
+  if(s.type === 'times_per_week'){
+    let streak = 0;
+    for(let w = 0; w < 105; w++){
+      if(doneInWeek(h, w) >= s.n) streak++;
+      else if(w === 0) continue;   // текущая неделя ещё идёт
+      else break;
+    }
+    return streak;
+  }
+
   let streak = 0;
-  let cur = new Date(ty, tm, td);
-  // If today not marked, start counting from yesterday
-  const todayKey = dkey(cur.getFullYear(), cur.getMonth(), cur.getDate(), hid);
-  if(!data[todayKey]) cur.setDate(cur.getDate() - 1);
-  for(let i = 0; i < 366; i++){
-    const k = dkey(cur.getFullYear(), cur.getMonth(), cur.getDate(), hid);
-    if(data[k]) { streak++; cur.setDate(cur.getDate() - 1); }
-    else break;
+  const cur = new Date(ty, tm, td);
+  for(let i = 0; i < 400; i++){
+    const day = dayObj(cur);
+    if(isPlannedDay(h, day)){
+      if(data[dkey(day.y, day.m, day.d, h.id)]) streak++;
+      else if(i > 0) break;        // сегодняшний пропуск ещё не пропуск
+    }
+    cur.setDate(cur.getDate() - 1);
   }
   return streak;
 }
+
+// Единица серии зависит от графика: недели или дни.
+function streakUnit(h){ return habitSchedule(h).type === 'times_per_week' ? 'week' : 'day'; }
 
 // Сколько отметок накоплено по привычке — нужно для честного
 // предупреждения при удалении.
@@ -974,60 +1291,156 @@ function countMarks(hid){
   const suffix = '/' + hid;
   return Object.keys(data).filter(k => k.endsWith(suffix) && data[k]).length;
 }
-function getMonthPct(hid){ let done=0; for(let i=1;i<=td;i++) if(data[dkey(ty,tm,i,hid)]) done++; return td?Math.round(done/td*100):0; }
-function checkAllDone(days){ const t=days.find(d=>isToday(d)); return t?HABITS.every(h=>data[dkey(t.y,t.m,t.d,h.id)]):false; }
 
-function renderStats(days){
-  let done=0,total=0,bestStreak=0,perfectDays=0;
-  days.filter(d=>!isFuture(d)).forEach(day=>{
-    let allDone=true;
-    HABITS.forEach(h=>{ if(data[dkey(day.y,day.m,day.d,h.id)])done++; else allDone=false; total++; });
-    if(allDone) perfectDays++;
-  });
-  HABITS.forEach(h=>{ const s=getStreak(h.id); if(s>bestStreak)bestStreak=s; });
-  const pct=total?Math.round(done/total*100):0;
-  document.getElementById('stats-row').innerHTML=[
-    {num:done,label:'Выполнено'},{num:pct+'%',label:'Процент'},
-    {num:bestStreak,label:'Серия'},{num:perfectDays,label:'Идеальных'}
-  ].map(s=>'<div class="stat"><div class="stat-num">'+s.num+'</div><div class="stat-label">'+s.label+'</div></div>').join('');
+// Процент за текущий месяц считается от ПЛАНОВЫХ дней, а не от всех.
+function getMonthPct(hid){
+  const h = typeof hid === 'object' ? hid : habitById(hid);
+  if(!h) return 0;
+  const s = habitSchedule(h);
+  let done = 0, planned = 0;
+
+  if(s.type === 'times_per_week'){
+    // Норма за прошедшую часть месяца: n на каждую начатую неделю.
+    for(let i = 1; i <= td; i++) if(data[dkey(ty, tm, i, h.id)]) done++;
+    planned = Math.max(1, Math.round(td / 7 * s.n));
+  } else {
+    for(let i = 1; i <= td; i++){
+      const day = dayObj(new Date(ty, tm, i));
+      if(!isPlannedDay(h, day)) continue;
+      planned++;
+      if(data[dkey(ty, tm, i, h.id)]) done++;
+    }
+  }
+  if(!planned) return 0;
+  return Math.min(100, Math.round(done / planned * 100));
 }
+
+// «День закрыт» — выполнены все привычки, запланированные именно на сегодня.
+function checkAllDone(days){
+  const t = days.find(d => isToday(d));
+  if(!t) return false;
+  const due = activeHabits().filter(h => isPlannedDay(h, t));
+  return due.length > 0 && due.every(h => data[dkey(t.y, t.m, t.d, h.id)]);
+}
+
+// Статистика с явной базой: «47 из 63» вместо «47», имя привычки-рекордсмена
+// и понятная подпись периода — раньше числа не говорили, от чего считаются.
+function renderStats(days){
+  const list = activeHabits();
+  let done = 0, planned = 0, fullDays = 0, countedDays = 0;
+
+  days.filter(d => !isFuture(d)).forEach(day=>{
+    const due = list.filter(h => isPlannedDay(h, day));
+    if(!due.length) return;
+    countedDays++;
+    let all = true;
+    due.forEach(h=>{
+      planned++;
+      if(data[dkey(day.y, day.m, day.d, h.id)]) done++; else all = false;
+    });
+    if(all) fullDays++;
+  });
+
+  let best = 0, bestName = '';
+  list.forEach(h=>{
+    const s = getStreak(h);
+    if(s > best){ best = s; bestName = h.name; }
+  });
+
+  const pct = planned ? Math.round(done / planned * 100) : 0;
+  const bestLabel = best
+    ? (streakUnit(habitById2(bestName)) === 'week' ? 'нед.' : 'дн.')
+    : '';
+
+  const cards = [
+    {num: done + '<span class="stat-of"> из ' + planned + '</span>', label: 'Выполнено'},
+    {num: pct + '%',                                                 label: 'Процент'},
+    {num: best + (bestLabel ? '<span class="stat-of"> ' + bestLabel + '</span>' : ''),
+     label: best ? esc(trimName(bestName)) : 'Серия'},
+    {num: fullDays + '<span class="stat-of"> из ' + countedDays + '</span>', label: 'Дней закрыто'}
+  ];
+  document.getElementById('stats-row').innerHTML = cards.map(s=>
+    '<div class="stat"><div class="stat-num">'+s.num+'</div><div class="stat-label">'+s.label+'</div></div>'
+  ).join('');
+
+  const per = document.getElementById('stats-period');
+  if(per) per.textContent = view === 'week' ? 'за эту неделю'
+                          : view === 'month' ? 'за ' + MON_F[new Date(ty, tm+offset, 1).getMonth()].toLowerCase()
+                          : 'за 12 месяцев';
+}
+
+function habitById2(name){ return HABITS.find(h => h.name === name) || null; }
+function trimName(n){ return n && n.length > 14 ? n.slice(0, 13) + '…' : (n || 'Серия'); }
 
 // ── TOGGLE ────────────────────────────────────────────────────────────────
 function habitById(hid){ return HABITS.find(h => h.id === hid) || null; }
 
-// Обновляем только те точки, которых касается изменение, — раньше на каждый
-// клик перерисовывался весь список, из-за чего приходилось вручную
-// восстанавливать вертикальный и горизонтальные скроллы.
-function applyDotState(k, on, color){
-  document.querySelectorAll('[data-k="'+k+'"]').forEach(el=>{
-    el.classList.toggle('done', on);
-    el.style.background = on ? color : '';
-    el.textContent = on ? '✓' : '';
-  });
+// Единая отрисовка состояния точки: выполнено, частично (для привычек
+// с целью), день вне графика. Раньше состояний было два и логика жила
+// в трёх местах разом.
+function paintDot(el, h, k){
+  const done = !!data[k];
+  const target = habitTarget(h);
+  const val = target ? getValue(k) : 0;
+  const partial = !done && target > 0 && val > 0;
+
+  el.classList.toggle('done', done);
+  el.classList.toggle('partial', partial);
+  el.style.background = done ? h.color : '';
+  el.style.setProperty('--fill', partial ? Math.round(val / target * 100) + '%' : '0%');
+  el.setAttribute('aria-checked', done ? 'true' : 'false');
+
+  if(done) el.innerHTML = target ? '<span class="dot-num">'+target+'</span>' : '✓';
+  else if(partial) el.innerHTML = '<span class="dot-num">'+val+'</span>';
+  else el.innerHTML = '';
+}
+
+function applyDotState(k, hid){
+  const h = habitById(hid);
+  if(!h) return;
+  document.querySelectorAll('[data-k="'+k+'"]').forEach(el=>paintDot(el, h, k));
 }
 
 // Процент и серия в карточке конкретной привычки.
 function refreshHabitMeta(hid){
   const h = habitById(hid);
   if(!h) return;
-  const pct = getMonthPct(hid), streak = getStreak(hid);
+  const pct = getMonthPct(h), streak = getStreak(h);
   document.querySelectorAll('[data-habit="'+hid+'"]').forEach(card=>{
     const fill = card.querySelector('.progress-fill');
     if(fill) fill.style.width = pct + '%';
     card.querySelectorAll('.progress-pct, .month-pct').forEach(el=>{ el.textContent = pct + '%'; });
     const meta = card.querySelector('.habit-meta');
-    if(meta) meta.innerHTML = streak >= 1 ? streakLabel(streak, h.color) : '';
+    if(meta) meta.innerHTML = streak >= 1 ? streakLabel(streak, h.color, streakUnit(h)) : '';
   });
 }
 
 function toggle(y,m,d,hid){
-  const k = dkey(y,m,d,hid);
-  const on = !data[k];
-  if(on) data[k] = true; else delete data[k];
-  saveEntry(k, on);
-
   const h = habitById(hid);
-  applyDotState(k, on, h ? h.color : '');
+  if(!h) return;
+  const k = dkey(y,m,d,hid);
+  const target = habitTarget(h);
+  let on;
+
+  if(target){
+    // Привычка с целью: каждое нажатие прибавляет единицу, на цели
+    // засчитывается день, следующее нажатие обнуляет.
+    if(data[k]){ setValue(k, 0); on = false; }
+    else {
+      const val = getValue(k) + 1;
+      on = val >= target;
+      setValue(k, on ? target : val);
+    }
+    if(on) data[k] = true; else delete data[k];
+    saveEntry(k, on);
+    scheduleValuesSync();
+  } else {
+    on = !data[k];
+    if(on) data[k] = true; else delete data[k];
+    saveEntry(k, on);
+  }
+
+  applyDotState(k, hid);
   refreshHabitMeta(hid);
   const days = getViewDays();
   renderStats(days);
@@ -1075,58 +1488,136 @@ function flameVariantA(color){
     'transform:translateY(-1px)">🔥</span>';
 }
 
-function streakLabel(s, color){
+// Русские окончания: 1 день, 2–4 дня, 5–20 дней, 21 день, 22 дня…
+function plural(n, one, few, many){
+  const t = n % 100, u = n % 10;
+  if(t >= 11 && t <= 14) return many;
+  if(u === 1) return one;
+  if(u >= 2 && u <= 4) return few;
+  return many;
+}
+
+// unit='week' для привычек «N раз в неделю»: там серия измеряется неделями,
+// иначе «3 дня» врало бы про график из трёх тренировок.
+function streakLabel(s, color, unit){
   if(!s || s < 1) return '';
   const n = Math.floor(s);
-  // Русские окончания: 1 день, 2–4 дня, 5–20 дней, 21 день, 22 дня…
-  const t = n % 100, u = n % 10;
-  const suffix = (t >= 11 && t <= 14) ? 'дней'
-               : u === 1 ? 'день'
-               : (u >= 2 && u <= 4) ? 'дня' : 'дней';
+  const suffix = unit === 'week'
+    ? plural(n, 'неделя', 'недели', 'недель')
+    : plural(n, 'день', 'дня', 'дней');
   return flameVariantA(color) + ' ' + n + ' ' + suffix;
 }
 
 // ── RENDER ────────────────────────────────────────────────────────────────
 function render(){
-  const days=getViewDays();
-  document.getElementById('nav-title').textContent=navTitle(days);
-  document.getElementById('btn-week').className='view-btn'+(view==='week'?' active':'');
-  document.getElementById('btn-month').className='view-btn'+(view==='month'?' active':'');
+  const days = getViewDays();
+  document.getElementById('nav-title').textContent = navTitle(days);
+  ['week','month','year'].forEach(v=>{
+    const b = document.getElementById('btn-'+v);
+    if(!b) return;
+    b.className = 'view-btn' + (view===v ? ' active' : '');
+    b.setAttribute('aria-selected', view===v ? 'true' : 'false');
+  });
+  // У годового вида окно всегда одно — последние 12 месяцев, листать нечего.
+  const isYear = view === 'year';
+  document.getElementById('btn-prev').style.visibility = isYear ? 'hidden' : '';
+  document.getElementById('btn-next').style.visibility = isYear ? 'hidden' : '';
+
   const DN=['Воскресенье','Понедельник','Вторник','Среда','Четверг','Пятница','Суббота'];
-  document.getElementById('date-sub').textContent=DN[today.getDay()]+', '+td+' '+MON_S[tm];
+  document.getElementById('date-sub').textContent = DN[today.getDay()]+', '+td+' '+MON_S[tm];
   renderStats(days);
-  if(view==='week') renderWeek(days); else renderMonth(days);
+
+  // Пустое состояние: раньше при удалении всех привычек оставался
+  // голый экран без единой подсказки, что делать дальше.
+  if(!activeHabits().length){
+    document.getElementById('week-header').style.display = 'none';
+    document.getElementById('habits-list').innerHTML =
+      '<div class="empty">'+
+        '<div class="empty-emoji">🌱</div>'+
+        '<h3>Пока ни одной привычки</h3>'+
+        '<p>Добавьте первую — начать лучше с одной-двух, чтобы они успели закрепиться.</p>'+
+        '<button class="btn btn-primary" onclick="openModal()">Добавить привычку</button>'+
+      '</div>';
+    return;
+  }
+
+  if(view==='week') renderWeek(days);
+  else if(view==='month') renderMonth(days);
+  else renderYear();
+}
+
+// data-атрибуты точки: по ним обработчик-делегат понимает, что переключать.
+function dotAttrs(day, h, fut){
+  if(fut) return ' disabled';
+  return ' data-k="'+esc(dkey(day.y,day.m,day.d,h.id))+'"'+
+         ' data-y="'+day.y+'" data-m="'+day.m+'" data-d="'+day.d+'"'+
+         ' data-h="'+esc(h.id)+'"';
+}
+
+// Одна точка-переключатель. Это настоящая <button role="checkbox"> с
+// подписью: раньше был div, в который нельзя попасть табом и который
+// программа чтения с экрана объявляла пустым блоком.
+function dotHtml(day, h, baseClass, extraStyle){
+  const k = dkey(day.y, day.m, day.d, h.id);
+  const fut = isFuture(day), tod = isToday(day);
+  const done = !!data[k];
+  const target = habitTarget(h);
+  const val = target ? getValue(k) : 0;
+  const partial = !done && target > 0 && val > 0;
+  const offplan = !isPlannedDay(h, day);
+
+  const cls = baseClass +
+    (done ? ' done' : '') +
+    (fut ? ' future' : '') +
+    (partial ? ' partial' : '') +
+    (offplan ? ' offplan' : '') +
+    (tod && !done ? ' today-hl' : '');
+
+  const label = h.name + ', ' + day.d + ' ' + MON_S[day.m] +
+    (target ? ', цель ' + target : '') +
+    (offplan ? ', не по графику' : '');
+
+  const inner = done ? (target ? '<span class="dot-num">'+target+'</span>' : '✓')
+              : partial ? '<span class="dot-num">'+val+'</span>' : '';
+
+  return '<button type="button" class="'+cls+'" role="checkbox"'+
+    ' aria-checked="'+(done?'true':'false')+'"'+
+    ' aria-label="'+esc(label)+'"'+
+    ' style="--habit:'+esc(h.color)+';--fill:'+(partial?Math.round(val/target*100):0)+'%;'+
+      (done?'background:'+esc(h.color)+';':'')+(extraStyle||'')+'"'+
+    dotAttrs(day, h, fut)+'>'+inner+'</button>';
+}
+
+// Шапка карточки привычки — одинаковая в неделе и месяце.
+function habitHeadHtml(h){
+  const streak = getStreak(h);
+  return '<div class="habit-icon" style="--habit:'+esc(h.color)+';--habit-bg:'+esc(h.bg||'#EEEDFE')+';flex-shrink:0">'+esc(h.icon)+'</div>'+
+    '<div style="min-width:0">'+
+      '<div class="habit-name">'+esc(h.name)+'</div>'+
+      '<div class="habit-meta">'+(streak>=1?streakLabel(streak,h.color,streakUnit(h)):esc(scheduleLabel(h)))+'</div>'+
+    '</div>';
 }
 
 function renderWeek(days){
   const isMobile = window.innerWidth <= 600;
   const hdr = document.getElementById('week-header');
+  const list = activeHabits();
 
   if(isMobile){
     hdr.style.display = 'none';
-    // Mobile: each card has its own 7-col grid header + dots
-    document.getElementById('habits-list').innerHTML = HABITS.map(h=>{
-      const streak=getStreak(h.id), pct=getMonthPct(h.id);
+    document.getElementById('habits-list').innerHTML = list.map(h=>{
+      const pct = getMonthPct(h);
       const cols = days.map(day=>{
-        const fut=isFuture(day), tod=isToday(day), done=!!data[dkey(day.y,day.m,day.d,h.id)];
+        const tod = isToday(day);
         const ac = tod ? 'var(--accent)' : 'var(--text3)';
         return '<div style="display:flex;flex-direction:column;align-items:center;gap:3px">'+
           '<div style="font-size:10px;font-weight:'+(tod?600:400)+';color:'+ac+'">'+day.d+'</div>'+
-          '<div style="font-size:8px;color:'+ac+';text-transform:uppercase;opacity:.8">'+DOW[day.date.getDay()]+'</div>'+
-          '<div class="dot-btn'+(done?' done':'')+(fut?' future':'')+(tod&&!done?' today-hl':'')+
-            '" style="width:32px;height:32px;'+(done?'background:'+h.color:'')+'"'+dotAttrs(day,h,fut)+'>'+
-            (done?'✓':'')+
-          '</div>'+
+          '<div style="font-size:9px;color:'+ac+';text-transform:uppercase">'+DOW[day.date.getDay()]+'</div>'+
+          dotHtml(day, h, 'dot-btn', 'width:32px;height:32px;')+
         '</div>';
       }).join('');
       return '<div class="habit-card-week" data-habit="'+esc(h.id)+'">'+
-        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'+
-          '<div class="habit-icon" style="background:'+esc(h.bg)+';flex-shrink:0">'+esc(h.icon)+'</div>'+
-          '<div style="min-width:0">'+
-            '<div class="habit-name">'+esc(h.name)+'</div>'+
-            '<div class="habit-meta">'+(streak>=1?streakLabel(streak,h.color):'')+'</div>'+
-          '</div>'+
-        '</div>'+
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'+habitHeadHtml(h)+'</div>'+
         '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">'+cols+'</div>'+
         '<div class="progress-wrap">'+
           '<div class="progress-bar"><div class="progress-fill" style="width:'+pct+'%;background:'+esc(h.color)+'"></div></div>'+
@@ -1136,11 +1627,7 @@ function renderWeek(days){
     }).join('');
 
   } else {
-    // Desktop: shared header row + each card row use IDENTICAL grid
-    // Key: the header div and each card's inner grid both have 0 margin/padding offset
     const COLS = 'minmax(140px, 180px) repeat(7,44px)';
-
-    // Render shared header
     hdr.style.display = 'grid';
     hdr.style.gridTemplateColumns = COLS;
     hdr.style.gap = '12px';
@@ -1154,27 +1641,16 @@ function renderWeek(days){
       '</div>';
     }).join('');
 
-    // Each habit card: its inner grid uses the SAME COLS
-    document.getElementById('habits-list').innerHTML = HABITS.map(h=>{
-      const streak=getStreak(h.id), pct=getMonthPct(h.id);
-      const dots = days.map(day=>{
-        const fut=isFuture(day), tod=isToday(day), done=!!data[dkey(day.y,day.m,day.d,h.id)];
-        return '<div style="display:flex;justify-content:center;align-items:center">'+
-          '<div class="dot-btn'+(done?' done':'')+(fut?' future':'')+(tod&&!done?' today-hl':'')+
-            '" style="'+(done?'background:'+h.color:'')+'"'+dotAttrs(day,h,fut)+'>'+
-            (done?'✓':'')+
-          '</div>'+
-        '</div>';
-      }).join('');
+    document.getElementById('habits-list').innerHTML = list.map(h=>{
+      const pct = getMonthPct(h);
+      const dots = days.map(day=>
+        '<div style="display:flex;justify-content:center;align-items:center">'+
+          dotHtml(day, h, 'dot-btn')+
+        '</div>'
+      ).join('');
       return '<div class="habit-card-week" data-habit="'+esc(h.id)+'">'+
         '<div style="display:grid;grid-template-columns:'+COLS+';column-gap:12px;row-gap:6px;align-items:center">'+
-          '<div style="display:flex;align-items:center;gap:8px;min-width:0">'+
-            '<div class="habit-icon" style="background:'+esc(h.bg)+';flex-shrink:0">'+esc(h.icon)+'</div>'+
-            '<div style="min-width:0">'+
-              '<div class="habit-name">'+esc(h.name)+'</div>'+
-              '<div class="habit-meta">'+(streak>=1?streakLabel(streak,h.color):'')+'</div>'+
-            '</div>'+
-          '</div>'+
+          '<div style="display:flex;align-items:center;gap:8px;min-width:0">'+habitHeadHtml(h)+'</div>'+
           dots+
         '</div>'+
         '<div class="progress-wrap">'+
@@ -1186,53 +1662,294 @@ function renderWeek(days){
   }
 }
 
-// data-атрибуты точки: по ним обработчик-делегат понимает, что переключать.
-// id привычки состоит только из букв, цифр и дефисов, но esc() ставим
-// на всякий случай — если формат id когда-нибудь изменится.
-function dotAttrs(day, h, fut){
-  if(fut) return '';
-  return ' data-k="'+esc(dkey(day.y,day.m,day.d,h.id))+'"'+
-         ' data-y="'+day.y+'" data-m="'+day.m+'" data-d="'+day.d+'"'+
-         ' data-h="'+esc(h.id)+'"';
-}
-
 function renderMonth(days){
   document.getElementById('week-header').style.display='none';
-  document.getElementById('habits-list').innerHTML=HABITS.map(h=>{
-    const streak=getStreak(h.id),pct=getMonthPct(h.id);
-    const cols=days.map(day=>{
-      const fut=isFuture(day),tod=isToday(day),done=!!data[dkey(day.y,day.m,day.d,h.id)];
-      return '<div class="month-day-col'+(tod?' today-col':'')+'">'+
-        '<div class="month-day-num">'+day.d+'</div><div class="month-day-dow">'+DOW[day.date.getDay()]+'</div>'+
-        '<div class="month-dot'+(done?' done':'')+(fut?' future':'')+(tod&&!done?' today-hl':'')+'" style="'+(done?'background:'+h.color:'')+'"'+dotAttrs(day,h,fut)+'>'+(done?'✓':'')+'</div></div>';
-    }).join('');
-    return '<div class="month-card" data-habit="'+esc(h.id)+'"><div class="month-card-header">'+
-      '<div class="habit-icon" style="background:'+esc(h.bg)+'">'+esc(h.icon)+'</div>'+
-      '<div style="flex:1;min-width:0"><div class="habit-name">'+esc(h.name)+'</div>'+
-      '<div class="habit-meta">'+(streak>=1?streakLabel(streak,h.color):'')+'</div>'+
-      '</div><span class="month-pct" style="font-size:12px;color:var(--text3);flex-shrink:0">'+pct+'%</span></div>'+
+  document.getElementById('habits-list').innerHTML = activeHabits().map(h=>{
+    const pct = getMonthPct(h);
+    const cols = days.map(day=>
+      '<div class="month-day-col'+(isToday(day)?' today-col':'')+'">'+
+        '<div class="month-day-num">'+day.d+'</div>'+
+        '<div class="month-day-dow">'+DOW[day.date.getDay()]+'</div>'+
+        dotHtml(day, h, 'month-dot')+
+      '</div>'
+    ).join('');
+    return '<div class="month-card" data-habit="'+esc(h.id)+'">'+
+      '<div class="month-card-header">'+habitHeadHtml(h)+
+      '<span class="month-pct" style="font-size:12px;color:var(--text3);flex-shrink:0;margin-left:auto">'+pct+'%</span></div>'+
       '<div class="month-scroll"><div class="month-days-wrap">'+cols+'</div></div>'+
-      '<div class="progress-wrap" style="margin-top:8px"><div class="progress-bar"><div class="progress-fill" style="width:'+pct+'%;background:'+esc(h.color)+'"></div></div></div></div>';
+      '<div class="progress-wrap" style="margin-top:8px"><div class="progress-bar">'+
+        '<div class="progress-fill" style="width:'+pct+'%;background:'+esc(h.color)+'"></div></div></div></div>';
+  }).join('');
+
+  syncMonthScrolls();
+}
+
+// Горизонтальные прокрутки месяца связываются между собой: раньше каждая
+// карточка ездила сама по себе, и сравнить один день по всем привычкам
+// было невозможно — а это и есть смысл месячного вида.
+let monthScrollLock = false;
+function syncMonthScrolls(){
+  const boxes = Array.from(document.querySelectorAll('.month-scroll'));
+  if(boxes.length < 2) { scrollMonthToToday(boxes); return; }
+  boxes.forEach(box=>{
+    box.addEventListener('scroll', ()=>{
+      if(monthScrollLock) return;
+      monthScrollLock = true;
+      boxes.forEach(other=>{ if(other !== box) other.scrollLeft = box.scrollLeft; });
+      requestAnimationFrame(()=>{ monthScrollLock = false; });
+    }, {passive:true});
+  });
+  scrollMonthToToday(boxes);
+}
+
+// При открытии месяца показываем сегодняшний день, а не 1-е число.
+function scrollMonthToToday(boxes){
+  if(!boxes || !boxes.length) return;
+  const inner = boxes[0].querySelector('.month-days-wrap');
+  if(!inner) return;
+  const base = new Date(ty, tm+offset, 1);
+  if(base.getMonth() !== tm || base.getFullYear() !== ty) return;
+  const step = inner.scrollWidth / Math.max(1, inner.children.length);
+  const left = Math.max(0, step * (td - 1) - boxes[0].clientWidth / 2 + step / 2);
+  boxes.forEach(b=>{ b.scrollLeft = left; });
+}
+
+// ── ГОДОВОЙ ВИД ───────────────────────────────────────────────────────────
+// Плитка на 53 недели: неделя показывает дисциплину, месяц — динамику,
+// а год показывает человека, который изменился. Данные уже были, не хватало
+// только отрисовки.
+function yearStart(){
+  const end = new Date(ty, tm, td);
+  const start = new Date(end);
+  start.setDate(start.getDate() - 364);
+  const dow = start.getDay() || 7;      // выравниваем на понедельник
+  start.setDate(start.getDate() - dow + 1);
+  start.setHours(0,0,0,0);
+  return start;
+}
+
+function renderYear(){
+  document.getElementById('week-header').style.display = 'none';
+  const start = yearStart();
+  const end = new Date(ty, tm, td);
+  const list = activeHabits();
+
+  document.getElementById('habits-list').innerHTML = list.map(h=>{
+    let cells = '', months = '', prevMonth = -1, weekCount = 0;
+    const cur = new Date(start);
+
+    while(cur <= end || cur.getDay() !== 1){
+      if(cur > end && cur.getDay() === 1) break;
+      const day = dayObj(cur);
+      const after = cur > end;
+      const k = dkey(day.y, day.m, day.d, h.id);
+      const done = !!data[k];
+
+      // Подпись месяца ставим в начале каждой новой недели месяца.
+      if(cur.getDay() === 1){
+        weekCount++;
+        months += '<span>' + (cur.getMonth() !== prevMonth ? MON_S[cur.getMonth()] : '') + '</span>';
+        prevMonth = cur.getMonth();
+      }
+
+      if(after){
+        cells += '<span class="year-dot out"></span>';
+      } else {
+        const title = day.d + ' ' + MON_S[day.m] + ' ' + day.y + (done ? ' — выполнено' : '');
+        cells += '<button type="button" class="year-dot'+(done?' done':'')+'"'+
+          ' role="checkbox" aria-checked="'+(done?'true':'false')+'"'+
+          ' aria-label="'+esc(h.name+', '+title)+'" title="'+esc(title)+'"'+
+          ' style="'+(done?'background:'+esc(h.color):'')+'"'+
+          dotAttrs(day, h, false)+'></button>';
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    const total = countMarks(h.id);
+    const streak = getStreak(h);
+    return '<div class="year-card" data-habit="'+esc(h.id)+'">'+
+      '<div class="year-head">'+habitHeadHtml(h)+
+        '<span style="margin-left:auto;font-size:12px;color:var(--text3);flex-shrink:0">'+
+          total+' '+plural(total,'отметка','отметки','отметок')+'</span>'+
+      '</div>'+
+      '<div class="year-scroll">'+
+        '<div class="year-months" style="grid-template-columns:repeat('+weekCount+',11px)">'+months+'</div>'+
+        '<div class="year-grid">'+cells+'</div>'+
+      '</div>'+
+      '<div class="year-legend">'+
+        (streak?'<span style="margin-right:auto">'+streakLabel(streak,h.color,streakUnit(h))+'</span>':'')+
+        '<span>меньше</span>'+
+        '<i style="background:var(--surface2)"></i>'+
+        '<i style="background:'+esc(h.color)+';opacity:.45"></i>'+
+        '<i style="background:'+esc(h.color)+'"></i>'+
+        '<span>больше</span>'+
+      '</div>'+
+    '</div>';
   }).join('');
 }
 
 // ── EDIT MODAL ────────────────────────────────────────────────────────────
-function openModal(){ editBuffer=HABITS.map(h=>Object.assign({},h)); renderEditor(); document.getElementById('edit-modal').classList.add('open'); }
-function closeModal(){ document.getElementById('edit-modal').classList.remove('open'); closeEmojiPicker(); }
+let lastFocused = null;
+
+// Копия должна быть глубокой: schedule — объект, и при плоском копировании
+// правка графика меняла бы привычку сразу, в обход кнопки «Отмена».
+function cloneHabit(h){
+  const c = Object.assign({}, h);
+  if(h.schedule) c.schedule = Object.assign({}, h.schedule,
+    Array.isArray(h.schedule.days) ? {days: h.schedule.days.slice()} : {});
+  return c;
+}
+
+function openModal(){
+  lastFocused = document.activeElement;
+  editBuffer = HABITS.map(cloneHabit);
+  renderEditor();
+  const m = document.getElementById('edit-modal');
+  m.classList.add('open');
+  m.setAttribute('aria-modal','true');
+  m.setAttribute('role','dialog');
+  const first = m.querySelector('.edit-input, .add-input');
+  if(first) first.focus();
+}
+
+function closeModal(){
+  document.getElementById('edit-modal').classList.remove('open');
+  closeEmojiPicker();
+  if(lastFocused && lastFocused.focus) lastFocused.focus();
+}
+
+// Esc закрывает модалку и выбор эмодзи — раньше ни одного обработчика
+// Escape в файле не было, выйти можно было только мышью.
+document.addEventListener('keydown', e=>{
+  if(e.key !== 'Escape') return;
+  if(document.getElementById('emoji-picker').classList.contains('open')){ closeEmojiPicker(); return; }
+  if(document.getElementById('edit-modal').classList.contains('open')) closeModal();
+  const crop = document.getElementById('crop-overlay');
+  if(crop) crop.remove();
+});
+
+// Фокус не уходит из открытой модалки: иначе табом попадаешь на элементы
+// под ней, не понимая, где находишься.
+document.addEventListener('keydown', e=>{
+  if(e.key !== 'Tab') return;
+  const m = document.getElementById('edit-modal');
+  if(!m.classList.contains('open')) return;
+  const items = m.querySelectorAll('button, input, select, [tabindex]:not([tabindex="-1"])');
+  if(!items.length) return;
+  const first = items[0], last = items[items.length-1];
+  if(e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+  else if(!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+});
+
+const DOW_SHORT = ['вс','пн','вт','ср','чт','пт','сб'];
+
 function renderEditor(){
-  document.getElementById('habit-editor').innerHTML=editBuffer.map((h,i)=>
-    '<div class="edit-row" draggable="true" data-idx="'+i+'" '+
+  document.getElementById('habit-editor').innerHTML = editBuffer.map((h,i)=>{
+    const s = habitSchedule(h);
+    const target = habitTarget(h);
+
+    // Настройка графика: либо дни недели, либо «N раз в неделю».
+    let extra = '<select class="edit-select" onchange="setSchedType('+i+',this.value)" aria-label="Как часто">'+
+        '<option value="daily"'         +(s.type==='daily'?' selected':'')+         '>каждый день</option>'+
+        '<option value="weekdays"'      +(s.type==='weekdays'?' selected':'')+      '>по дням недели</option>'+
+        '<option value="times_per_week"'+(s.type==='times_per_week'?' selected':'')+'>раз в неделю</option>'+
+      '</select>';
+
+    if(s.type === 'weekdays'){
+      extra += '<span class="dow-pick">' + [1,2,3,4,5,6,0].map(d=>
+        '<button type="button" class="dow-btn'+(s.days.indexOf(d)!==-1?' on':'')+'"'+
+        ' onclick="toggleDow('+i+','+d+')" aria-pressed="'+(s.days.indexOf(d)!==-1?'true':'false')+'"'+
+        ' aria-label="'+DOW_SHORT[d]+'">'+DOW_SHORT[d]+'</button>'
+      ).join('') + '</span>';
+    } else if(s.type === 'times_per_week'){
+      extra += '<input class="edit-num" type="number" min="1" max="7" value="'+s.n+'"'+
+        ' onchange="setSchedTimes('+i+',this.value)" aria-label="Сколько раз в неделю">'+
+        '<span class="hint">раз в неделю</span>';
+    }
+
+    extra += '<input class="edit-num" type="number" min="0" max="999" value="'+(target||'')+'"'+
+      ' placeholder="цель" onchange="setTarget('+i+',this.value)" aria-label="Цель за день">'+
+      '<span class="hint">цель за день, если есть</span>';
+
+    return '<div class="edit-row" draggable="true" data-idx="'+i+'" '+
          'ondragstart="dragStart(event,'+i+')" '+
          'ondragover="dragOver(event)" '+
          'ondrop="dragDrop(event,'+i+')" '+
          'ondragend="dragEnd(event)" '+
          'ondragleave="dragLeave(event)">'+
       '<span class="drag-handle" title="Перетащи чтобы изменить порядок">⋮⋮</span>'+
-      '<button class="edit-icon-btn" onclick="openEmojiPicker('+i+',this)" title="Выбрать эмодзи">'+esc(h.icon)+'</button>'+
-      '<input class="edit-input" value="'+esc(h.name)+'" oninput="editBuffer['+i+'].name=this.value" maxlength="30">'+
-      '<button class="del-btn" onclick="removeHabit('+i+')">✕</button>'+
-    '</div>'
-  ).join('');
+      '<button class="edit-icon-btn" onclick="openEmojiPicker('+i+',this)" title="Выбрать эмодзи" aria-label="Выбрать эмодзи">'+esc(h.icon)+'</button>'+
+      '<input class="edit-input" value="'+esc(h.name)+'" oninput="editBuffer['+i+'].name=this.value" maxlength="30" aria-label="Название привычки">'+
+      '<button class="arch-btn" onclick="archiveHabit('+i+')" title="Убрать в архив вместе с историей">В архив</button>'+
+      '<button class="del-btn" onclick="removeHabit('+i+')" title="Удалить" aria-label="Удалить привычку">✕</button>'+
+      '<div class="edit-extra">'+extra+'</div>'+
+    '</div>';
+  }).join('');
+
+  renderArchive();
+}
+
+function setSchedType(i, type){
+  const h = editBuffer[i]; if(!h) return;
+  if(type === 'daily') h.schedule = {type:'daily'};
+  else if(type === 'weekdays') h.schedule = {type:'weekdays', days:[1,3,5]};
+  else h.schedule = {type:'times_per_week', n:3};
+  renderEditor();
+}
+function toggleDow(i, d){
+  const h = editBuffer[i]; if(!h) return;
+  const s = habitSchedule(h);
+  if(s.type !== 'weekdays') return;
+  const days = s.days.slice();
+  const at = days.indexOf(d);
+  if(at === -1) days.push(d); else days.splice(at, 1);
+  // Пустой список превратил бы привычку в невыполнимую — оставляем как было.
+  if(!days.length){ toast('Хотя бы один день нужно оставить', true); return; }
+  h.schedule = {type:'weekdays', days};
+  renderEditor();
+}
+function setSchedTimes(i, v){
+  const h = editBuffer[i]; if(!h) return;
+  h.schedule = {type:'times_per_week', n: Math.min(7, Math.max(1, parseInt(v,10)||1))};
+  renderEditor();
+}
+function setTarget(i, v){
+  const h = editBuffer[i]; if(!h) return;
+  const n = parseInt(v, 10);
+  if(n && n > 1) h.target = n; else delete h.target;
+  renderEditor();
+}
+
+// ── АРХИВ ─────────────────────────────────────────────────────────────────
+// Человек бросил бегать зимой — раньше единственным инструментом было
+// удаление вместе со всей историей за лето.
+function renderArchive(){
+  const box = document.getElementById('archive-block');
+  if(!box) return;
+  const arch = editBuffer.filter(h => h.archived);
+  if(!arch.length){ box.innerHTML = ''; return; }
+  box.innerHTML = '<div class="arch-head">В архиве</div>' + arch.map(h=>{
+    const i = editBuffer.indexOf(h);
+    const n = countMarks(h.id);
+    return '<div class="arch-row">'+
+      '<span>'+esc(h.icon)+'</span>'+
+      '<span class="nm">'+esc(h.name)+'</span>'+
+      '<span class="hint">'+n+' '+plural(n,'отметка','отметки','отметок')+'</span>'+
+      '<button class="arch-btn" onclick="unarchiveHabit('+i+')">Вернуть</button>'+
+    '</div>';
+  }).join('');
+}
+
+function archiveHabit(i){
+  const h = editBuffer[i]; if(!h) return;
+  h.archived = true;
+  renderEditor();
+  toast('«' + h.name + '» в архиве — история сохранена');
+}
+function unarchiveHabit(i){
+  const h = editBuffer[i]; if(!h) return;
+  delete h.archived;
+  renderEditor();
 }
 
 // ── DRAG REORDER ───────────────────────────────────────────────────────
@@ -1264,19 +1981,26 @@ function dragEnd(e){
   document.querySelectorAll('.edit-row.drop-target').forEach(r=>r.classList.remove('drop-target'));
   dragSrcIdx=null;
 }
-// Удаление осиротит всю историю привычки, поэтому спрашиваем и показываем,
-// сколько отметок будет потеряно.
+// Удаление осиротит всю историю привычки, поэтому спрашиваем, показываем,
+// сколько отметок будет потеряно, и даём отменить.
 function removeHabit(i){
   const h = editBuffer[i];
   if(!h) return;
   const marks = h.id ? countMarks(h.id) : 0;
   const question = marks > 0
     ? 'Удалить привычку «' + h.name + '»?\n\nВместе с ней потеряется история: ' +
-      marks + ' ' + (marks % 10 === 1 && marks % 100 !== 11 ? 'отметка' : 'отметок') + '.'
+      marks + ' ' + plural(marks, 'отметка', 'отметки', 'отметок') + '.\n\n' +
+      'Если нужен перерыв — лучше «В архив»: там история сохранится.'
     : 'Удалить привычку «' + h.name + '»?';
   if(!confirm(question)) return;
+
+  const removed = Object.assign({}, h);
   editBuffer.splice(i,1);
   renderEditor();
+  toast('«' + removed.name + '» удалена', false, ()=>{
+    editBuffer.splice(Math.min(i, editBuffer.length), 0, removed);
+    renderEditor();
+  });
 }
 
 async function addHabit(){
@@ -1290,6 +2014,52 @@ async function addHabit(){
   editBuffer.push({id:newHabitId(),name,icon,color:COLOR_POOL[idx],bg:BG_POOL[idx]});
   inp.value=''; btn.disabled=false; btn.textContent='+ Добавить';
   renderEditor();
+}
+
+// ── СИНХРОНИЗАЦИЯ ЗНАЧЕНИЙ ────────────────────────────────────────────────
+// Числа количественных привычек («6 стаканов из 8») лежат отдельным JSON
+// в user_settings: колонка done в базе булева, и менять её схему ради
+// этого не понадобилось. Пишем с задержкой, чтобы серия быстрых нажатий
+// не превратилась в серию запросов.
+let valuesSyncTimer = null;
+function scheduleValuesSync(){
+  clearTimeout(valuesSyncTimer);
+  valuesSyncTimer = setTimeout(saveValuesToServer, 2500);
+}
+
+async function saveValuesToServer(){
+  if(!currentUser || isDemoMode) return;
+  try{
+    const res = await sbFetchWithTimeout(()=>
+      sb.from('user_settings').upsert(
+        {user_id: currentUser.id, key:'values', value: JSON.stringify(marksValues),
+         updated_at: new Date().toISOString()},
+        {onConflict:'user_id,key'}
+      )
+    );
+    if(res.error) throw new Error(res.error.message);
+  }catch(e){
+    // Значения останутся локальными; следующая правка попробует снова.
+    setSyncStatus('прогресс сохранён локально', false);
+  }
+}
+
+async function loadValuesFromServer(){
+  try{ marksValues = JSON.parse(localStorage.getItem(valuesKey()) || '{}'); }
+  catch(e){ marksValues = {}; }
+  if(!currentUser || isDemoMode) return;
+  try{
+    const res = await sbFetchWithTimeout(()=>
+      sb.from('user_settings').select('value').eq('user_id', currentUser.id).eq('key','values').maybeSingle()
+    );
+    if(res.data && res.data.value){
+      const server = JSON.parse(res.data.value);
+      if(server && typeof server === 'object'){
+        marksValues = server;
+        try{ localStorage.setItem(valuesKey(), JSON.stringify(marksValues)); }catch(e){}
+      }
+    }
+  }catch(e){ /* останутся локальные значения */ }
 }
 
 // Отправка списка привычек на сервер. Клиент Supabase не бросает исключение
@@ -1318,7 +2088,7 @@ async function saveHabitsToServer(){
 }
 
 async function saveHabits(){
-  HABITS=editBuffer.map(h=>Object.assign({},h));
+  HABITS = editBuffer.map(cloneHabit);
   ensureHabitIds();
   localStorage.setItem('customHabits',JSON.stringify(HABITS));
   closeModal(); render();
@@ -1343,7 +2113,7 @@ const QUOTES=[
   {text:'Каждый день — это новый шанс изменить свою жизнь.',author:''},
   {text:'Успех — это сумма небольших усилий, повторяемых день за днём.',author:'Роберт Кольер'},
   {text:'Тело достигает того, во что верит разум.',author:''},
-  {text:'Сначала ты формируешь привычки, потом привычки формируют тебя.',author:'Джон Дрейден'},
+  {text:'Сначала ты формируешь привычки, потом привычки формируют тебя.',author:''},
   {text:'Мотивация заставляет начать. Привычка заставляет продолжать.',author:'Джим Рон'},
   {text:'Путь в тысячу миль начинается с одного шага.',author:'Лао-цзы'},
   {text:'Единственный способ делать великие дела — любить то, что делаешь.',author:'Стив Джобс'},
@@ -1407,7 +2177,7 @@ const QUOTES=[
   {text:'Хочешь изменить мир — начни с себя.',author:'Толстой'},
   {text:'Жизнь начинается там, где заканчивается зона комфорта.',author:'Нил Дональд Уолш'},
   {text:'Уверенность приходит не от постоянных успехов, а от умения оправляться после неудач.',author:''},
-  {text:'Сделай шаг, и дорога появится сама.',author:'Стив Джобс'},
+  {text:'Сделай шаг, и дорога появится сама.',author:''},
   {text:'Хороший сон — лучшая медитация.',author:'Далай Лама'},
   {text:'Твоё тело слышит всё, что говорит твой ум.',author:''},
   {text:'Движение лечит почти всё.',author:''},
@@ -1425,8 +2195,7 @@ const QUOTES=[
   {text:'Терпение и время делают больше, чем сила и страсть.',author:'Лафонтен'},
   {text:'Лучший способ предсказать своё будущее — создать его.',author:'Питер Друкер'},
   {text:'Знание без действия — это просто развлечение.',author:''},
-  {text:'Вставай рано. Работай усердно. Найди нефть.',author:'Дж. Пол Гетти'},
-  {text:'Никогда не поздно стать тем, кем ты мог бы быть.',author:'Джордж Элиот'},
+    {text:'Никогда не поздно стать тем, кем ты мог бы быть.',author:'Джордж Элиот'},
   {text:'Самодисциплина — это высшая форма самолюбия.',author:''},
   {text:'Ты то, что ты делаешь повторно.',author:''},
   {text:'Один хороший день — это случайность. Тридцать — это привычка.',author:''},
@@ -1438,7 +2207,13 @@ const QUOTES=[
   {text:'Люди, которые говорят, что это невозможно, просто боятся попробовать.',author:''},
   {text:'Твоё завтра зависит от того, что ты делаешь сегодня.',author:''},
 ];
-let quoteIndex=Math.floor(Math.random()*QUOTES.length);
+// Цитата дня, а не случайная при каждом входе: у всех она одна и та же
+// в течение суток, и это маленький общий ритуал вместо шума.
+function quoteOfTheDay(){
+  const days = Math.floor(Date.UTC(ty, tm, td) / 86400000);
+  return days % QUOTES.length;
+}
+let quoteIndex = quoteOfTheDay();
 function renderQuote(){
   const q=QUOTES[quoteIndex];
   const te=document.getElementById('quote-text'),ae=document.getElementById('quote-author');
@@ -1451,6 +2226,7 @@ function nextQuote(){ let n; do{n=Math.floor(Math.random()*QUOTES.length);}while
 const AC=new(window.AudioContext||window.webkitAudioContext)();
 function resumeAC(){ if(AC.state==='suspended') AC.resume(); }
 function magicSound(type){
+  if(!soundOn) return;
   resumeAC(); const now=AC.currentTime;
   const node=(f,t,dur,gp,ge,st,fe)=>{ const o=AC.createOscillator(),g=AC.createGain(); o.type=t; o.frequency.setValueAtTime(f,st||now); if(fe) o.frequency.exponentialRampToValueAtTime(fe,(st||now)+dur*0.8); g.gain.setValueAtTime(0.001,st||now); g.gain.linearRampToValueAtTime(gp,(st||now)+0.02); g.gain.exponentialRampToValueAtTime(ge||(gp*0.001),(st||now)+dur); o.connect(g); g.connect(AC.destination); o.start(st||now); o.stop((st||now)+dur+0.01); };
   if(type==='nav'){ node(660,'sine',0.18,0.08,0.001,now,1100); node(990,'sine',0.14,0.05,0.001,now+0.06,1500); node(1320,'sine',0.10,0.03,0.001,now+0.11); }
@@ -1465,6 +2241,7 @@ document.getElementById('edit-btn').addEventListener('click',()=>magicSound('edi
 
 // ── CONFETTI ──────────────────────────────────────────────────────────────
 function playCheer(big){
+  if(!soundOn) return;
   resumeAC(); const now=AC.currentTime;
   // Magical chime: C major arpeggio + sparkly fairy dust ticks
   const notes = big
@@ -1642,11 +2419,12 @@ function exportData(){
   document.getElementById('user-menu').classList.remove('open');
   const payload = {
     format: 'habit-tracker',
-    version: 2,
+    version: 3,
     exportedAt: new Date().toISOString(),
     email: (currentUser && currentUser.email) || null,
-    habits: HABITS,
-    marks: data
+    habits: HABITS,          // вместе с графиком, целью и признаком архива
+    marks: data,
+    values: marksValues      // числа количественных привычек
   };
   try{
     const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
@@ -1701,11 +2479,23 @@ function importData(e){
 
     incoming.forEach(k=>{ data[k] = true; queueAdd(k, true); });
     localStorage.setItem(cacheKey(), JSON.stringify(data));
+
+    // Числа количественных привычек из файла версии 3 и выше.
+    let vals = 0;
+    if(payload.values && typeof payload.values === 'object'){
+      Object.keys(payload.values).forEach(k=>{
+        const v = payload.values[k];
+        if(typeof v === 'number' && v > 0){ marksValues[k] = v; vals++; }
+      });
+      try{ localStorage.setItem(valuesKey(), JSON.stringify(marksValues)); }catch(e){}
+    }
+
     render();
-    toast('Загружено ' + incoming.length + ' отметок');
+    toast('Загружено ' + incoming.length + ' отметок' + (vals ? ' и ' + vals + ' значений' : ''));
 
     if(currentUser && !isDemoMode){
       if(hasHabits) await saveHabitsToServer();
+      if(vals) await saveValuesToServer();
       await flushQueue();
     }
   };
@@ -1718,11 +2508,17 @@ function importData(e){
   // Theme
   const t=localStorage.getItem('theme');
   if(t==='dark'){isDark=true;document.documentElement.setAttribute('data-theme','dark');document.getElementById('theme-btn').textContent='☀️';}
-  view=(window.innerWidth<=600)?'week':(localStorage.getItem('view')||'week');
+  // Выбранный вид уважаем и на телефоне; неделя — только если выбора не было.
+  const savedView = localStorage.getItem('view');
+  view = (savedView === 'week' || savedView === 'month' || savedView === 'year')
+    ? savedView
+    : 'week';
   let stored = null;
   try{ stored = JSON.parse(localStorage.getItem('customHabits')||'null'); }catch(e){}
   HABITS = (Array.isArray(stored) && stored.length) ? stored : cloneDefaults();
   ensureHabitIds();
+  try{ marksValues = JSON.parse(localStorage.getItem(valuesKey()) || '{}'); }catch(e){ marksValues = {}; }
+  initSound();
   buildEmojiPicker();
   renderQuote();
 
@@ -1807,83 +2603,43 @@ function importData(e){
     setTimeout(function(){ s.remove(); }, 1000);
   });
 
-  // Ночные звёздочки
-  function buildStars(){
-    let layer = document.querySelector('.night-stars');
-    if(!layer){
-      layer = document.createElement('div');
-      layer.className = 'night-stars';
-      document.body.appendChild(layer);
-    }
-    layer.innerHTML = '';
-    for(let i=0;i<40;i++){
-      const star = document.createElement('div');
-      star.className = 'night-star';
-      const sz = 1 + Math.random()*2.2;
-      star.style.width = star.style.height = sz + 'px';
-      star.style.left = (Math.random()*100) + '%';
-      star.style.top  = (Math.random()*100) + '%';
-      star.style.animationDelay = (Math.random()*3) + 's';
-      star.style.animationDuration = (2 + Math.random()*3) + 's';
-      layer.appendChild(star);
-    }
-  }
-  buildStars();
-  const themeObs = new MutationObserver(buildStars);
-  themeObs.observe(document.body, {attributes:true, attributeFilter:['class']});
-
-  // Плавное появление отключено — мигало при ре-рендере
-
   // Sparkle в шапке
   setTimeout(function(){
-    const h = document.querySelector('header h1, header h2, .header h1, .header h2, h1');
+    const h = document.querySelector('.header h1');
     if(h && !h.classList.contains('app-title')) h.classList.add('app-title');
   }, 200);
-
-  // Pixie dust burst
-  function pixieBurst(){
-    const burst = document.createElement('div');
-    burst.className = 'pixie-dust';
-    document.body.appendChild(burst);
-    const N = 32;
-    for(let i=0;i<N;i++){
-      const p = document.createElement('div');
-      p.className = 'pixie-particle';
-      const angle = (Math.PI*2 / N) * i + Math.random()*0.4;
-      const dist = 140 + Math.random()*200;
-      p.style.setProperty('--px', Math.cos(angle)*dist + 'px');
-      p.style.setProperty('--py', Math.sin(angle)*dist + 'px');
-      p.style.animationDelay = (Math.random()*0.15) + 's';
-      burst.appendChild(p);
-    }
-    setTimeout(function(){ burst.remove(); }, 2200);
-  }
-
-  // Pixie dust звук
-  let actx = null;
-  function playPixie(){
-    try{
-      if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
-      const now = actx.currentTime;
-      const notes = [880, 1175, 1568, 2093, 2637];
-      notes.forEach(function(f, i){
-        const o = actx.createOscillator();
-        const g = actx.createGain();
-        o.type = 'triangle';
-        o.frequency.value = f;
-        g.gain.setValueAtTime(0, now + i*0.06);
-        g.gain.linearRampToValueAtTime(0.14, now + i*0.06 + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.001, now + i*0.06 + 0.5);
-        o.connect(g); g.connect(actx.destination);
-        o.start(now + i*0.06); o.stop(now + i*0.06 + 0.55);
-      });
-    }catch(e){}
-  }
-
-  // Magic Moment отключён
-
-  // Хук на toggle отключён — лишние анимации убраны
 })();
+
+// Ночные звёздочки для тёмной темы. Раньше слой строился, но никогда не
+// показывался: стили ждали класс dark на body, а тема ставит data-theme
+// на html. Теперь звёзды перестраиваются при переключении темы напрямую.
+function buildStars(){
+  if(REDUCED_MOTION) return;
+  let layer = document.querySelector('.night-stars');
+  if(!layer){
+    layer = document.createElement('div');
+    layer.className = 'night-stars';
+    document.body.appendChild(layer);
+  }
+  // В светлой теме слой скрыт стилями — незачем держать в нём узлы.
+  if(document.documentElement.getAttribute('data-theme') !== 'dark'){
+    layer.innerHTML = '';
+    return;
+  }
+  layer.innerHTML = '';
+  for(let i=0;i<40;i++){
+    const star = document.createElement('div');
+    star.className = 'night-star';
+    const sz = 1 + Math.random()*2.2;
+    star.style.width = star.style.height = sz + 'px';
+    star.style.left = (Math.random()*100) + '%';
+    star.style.top  = (Math.random()*100) + '%';
+    star.style.animationDelay = (Math.random()*3) + 's';
+    star.style.animationDuration = (2 + Math.random()*3) + 's';
+    layer.appendChild(star);
+  }
+}
+buildStars();
 </script>
 </body>
 </html>
