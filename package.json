@@ -1,0 +1,16 @@
+{
+  "name": "tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Трекер привычек — PWA в одном файле index.html",
+  "scripts": {
+    "test": "node tests/test-logic.js index.html && node tests/test-schedule.js index.html",
+    "test:syntax": "node tests/check-syntax.js index.html",
+    "test:e2e": "playwright test",
+    "test:all": "npm run test:syntax && npm test && npm run test:e2e",
+    "serve": "node tests/serve.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
+  }
+}

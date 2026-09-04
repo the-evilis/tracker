@@ -1,6 +1,13 @@
 # Локальные настройки со строкой подключения к базе и токенами.
 # В репозиторий не попадают — шаблон лежит в .env.example.
 .env
+bot/.env
 
 # Архивы бэкапов
 backups/
+
+# Зависимости и артефакты тестов
+node_modules/
+test-results/
+playwright-report/
+blob-report/
