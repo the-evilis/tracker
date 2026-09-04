@@ -1,0 +1,31 @@
+[Unit]
+Description=Бот напоминаний трекера привычек (tracker.fountaine.online)
+Documentation=https://github.com/the-evilis/tracker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/tracker-bot
+EnvironmentFile=/opt/tracker-bot/.env
+ExecStart=/usr/bin/node /opt/tracker-bot/index.js
+Restart=always
+RestartSec=10
+
+# Порта бот не слушает — он сам ходит в Telegram длинным опросом,
+# поэтому в nginx и firewall его прописывать не нужно.
+
+# Ограничения: сервису нужен только свой каталог и файл лога.
+User=root
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/tracker-bot /var/log
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tracker-bot
+
+[Install]
+WantedBy=multi-user.target

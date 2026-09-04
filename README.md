@@ -24,6 +24,11 @@
 | `/var/log/tracker-deploy.log` | Лог деплоев (ротация: 500 строк) |
 | `/var/log/tracker-keepalive.log` | Лог keep-alive (ротация: 500 строк) |
 | `/var/log/tracker-backup.log` | Лог бэкапов (ротация: 500 строк) |
+| `/opt/tracker-bot/` | Бот напоминаний в Telegram (systemd-сервис `tracker-bot`) |
+| `/opt/tracker-bot/.env` | Токен бота и ключ Supabase, права 600 |
+| `/opt/tracker-bot/state.json` | Смещение опроса и день последнего напоминания |
+| `/var/log/tracker-bot.log` | Лог бота (ротация: 1 МБ × 3 файла) |
+| `/var/log/tracker-bot-deploy.log` | Лог обновлений бота (ротация: 500 строк) |
 
 SSL: Let's Encrypt, продлевается автоматически таймером certbot.
 
@@ -67,7 +72,7 @@ npm run test:all            # синтаксис + логика + браузер
 | Команда | Что проверяет |
 |---|---|
 | `npm run test:syntax` | Компилирует `<script>` из `index.html` — ловит опечатки до открытия страницы |
-| `npm test` | Логика без DOM: миграция ключей, экранирование, графики, серии, проценты, архив (79 проверок) |
+| `npm test` | Логика без DOM: миграция ключей, экранирование, графики, серии, проценты, архив, логика и сетевой слой бота (165 проверок) |
 | `npm run test:e2e` | Smoke в настоящем Chromium: демо-режим, отметки, виды, модалка, тема, PWA |
 
 Smoke-тесты поднимают `tests/serve.js` (та же статика, что уходит в вебрут),
@@ -142,9 +147,120 @@ gunzip -c /opt/tracker/backups/tracker-ГГГГММДД-ЧЧММСС.sql.gz | ps
 
 ## Уведомления в Telegram (необязательно)
 
-Скрипты умеют сообщать о проблемах в Telegram. Вписать в `/opt/tracker/.env`
-токен бота — `TELEGRAM_BOT_TOKEN`; chat_id уже проставлен. Пока токен пустой,
-скрипты просто пишут в лог.
+Служебные скрипты (`deploy.sh`, `keepalive.sh`, `backup.sh`) умеют сообщать
+о проблемах в Telegram. Вписать в `/opt/tracker/.env` токен бота —
+`TELEGRAM_BOT_TOKEN`; chat_id уже проставлен. Пока токен пустой, скрипты
+просто пишут в лог.
+
+## Бот напоминаний
+
+Вечером присылает в Telegram список того, что осталось на сегодня, и даёт
+отметить привычку кнопкой прямо в чате. Отметка уходит в ту же базу и тем же
+ключом `год/месяц/день/<id привычки>`, что и из браузера, — приложение
+подхватит её при следующей загрузке.
+
+Живёт в `/opt/tracker-bot`, отдельный systemd-сервис `tracker-bot`.
+**Порт не занимает** и в nginx не прописывается: бот сам ходит в Telegram
+длинным опросом, входящих соединений не принимает.
+
+Команды в чате: `/today` — что осталось сейчас, `/stats` — серии и проценты
+за месяц, `/help` — справка. Любое другое сообщение боту равносильно `/today`.
+Отвечает он только тем chat_id, которые перечислены в настройках.
+
+### Что нужно приготовить
+
+1. **Токен бота** — написать [@BotFather](https://t.me/BotFather), команда
+   `/newbot`, скопировать выданный токен.
+2. **chat_id** — свой можно узнать у [@userinfobot](https://t.me/userinfobot).
+3. **user_id** — UUID в дашборде Supabase → **Authentication → Users**
+   (колонка UID у своего аккаунта).
+4. **Ключ `service_role`** — дашборд Supabase → **Project Settings → API Keys**.
+   Он обходит RLS: человек в момент напоминания не сидит в браузере, обычной
+   пользовательской сессии нет. Ключ хранится только в `/opt/tracker-bot/.env`
+   с правами `600` и никуда больше не попадает.
+
+### Установка
+
+Нужен Node.js 18 или новее — проверить `node -v`. Если его нет:
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+apt-get install -y nodejs
+```
+
+Дальше — под копипасту:
+
+```bash
+ssh root@152.42.129.14
+
+# свежий код в клоне репозитория
+cd /opt/tracker/repo && git fetch origin && git reset --hard origin/main
+
+# рабочий каталог бота
+mkdir -p /opt/tracker-bot/lib
+install -m 0644 /opt/tracker/repo/bot/index.js      /opt/tracker-bot/index.js
+install -m 0644 /opt/tracker/repo/bot/lib/*.js      /opt/tracker-bot/lib/
+install -m 0755 /opt/tracker/repo/bot/deploy-bot.sh /opt/tracker-bot/deploy-bot.sh
+
+# настройки
+cp /opt/tracker/repo/bot/env.example /opt/tracker-bot/.env
+chmod 600 /opt/tracker-bot/.env
+nano /opt/tracker-bot/.env     # токен, service_role, TRACKER_USERS=chat_id:user_id
+
+# сервис
+install -m 0644 /opt/tracker/repo/bot/tracker-bot.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now tracker-bot
+systemctl status tracker-bot --no-pager
+```
+
+Проверка: написать боту `/today` — он должен ответить списком. Первое
+напоминание придёт в ближайшие `REMIND_AT` (по умолчанию 21:00 по Москве).
+
+```bash
+journalctl -u tracker-bot -n 30 --no-pager   # что происходит
+tail -20 /var/log/tracker-bot.log            # свой лог, ротация по 1 МБ
+```
+
+### Обновление после пуша
+
+```bash
+/opt/tracker-bot/deploy-bot.sh
+```
+
+Скрипт подтянет код из GitHub, разложит в `/opt/tracker-bot`, при
+необходимости обновит юнит и перезапустит сервис. `.env` и `state.json`
+не трогаются. Результат — в `/var/log/tracker-bot-deploy.log`.
+
+### Настройки (`/opt/tracker-bot/.env`)
+
+| Переменная | Что задаёт |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | Токен от @BotFather |
+| `SUPABASE_URL` | Адрес проекта Supabase |
+| `SUPABASE_SERVICE_ROLE_KEY` | Ключ доступа в обход RLS |
+| `TRACKER_USERS` | Кому напоминать: `chat_id:user_id` через запятую |
+| `REMIND_AT` | Время вечерней сверки, по умолчанию `21:00` |
+| `TIMEZONE` | Часовой пояс, по умолчанию `Europe/Moscow` |
+| `CATCH_UP_MINUTES` | Окно догона, если бот лежал в момент напоминания |
+| `LOG_FILE`, `LOG_MAX_BYTES`, `LOG_KEEP` | Лог и ротация |
+| `STATE_FILE` | Смещение опроса и день последнего напоминания |
+| `HTTP_TIMEOUT_MS`, `POLL_TIMEOUT_SEC` | Таймауты сети |
+
+Ошибка в настройках останавливает бота сразу на старте с понятным сообщением
+в `journalctl` — молча работать с половиной конфигурации он не станет.
+
+### Как бот решает, о чём напоминать
+
+Так же, как приложение рисует экран: берёт список привычек из
+`user_settings`, отметки из `habits` и оставляет те, что сегодня в плане и
+ещё не закрыты. Архивные пропускаются; для «N раз в неделю» — если недельная
+норма уже выполнена, бот молчит. Если на сегодня не осталось ничего,
+напоминание не приходит вовсе.
+
+Формулы серий и процентов продублированы из `index.html`, поэтому
+`tests/test-bot.js` вытаскивает оригиналы прямо из HTML и сверяет их с
+ботовскими — разъехаться незаметно они не могут.
 
 ## Настройка Supabase под этот домен
 
