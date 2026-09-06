@@ -104,7 +104,7 @@
 <div id="main-app" class="app" style="display:none">
   <div class="header">
     <div class="header-left">
-      <h1>Трекер привычек</h1>
+      <h1 id="screen-title">Tracker</h1>
       <div class="date-sub" id="date-sub"></div>
       <div id="sync-status"></div>
     </div>
@@ -130,29 +130,149 @@
     </div>
   </div>
 
-  <div class="quote-card" onclick="nextQuote()">
-    <div class="quote-text" id="quote-text"></div>
-    <div class="quote-author" id="quote-author"></div>
+  <!-- ── TRACKER: привычки по дням ─────────────────────────────────────── -->
+  <section class="tab-panel" id="panel-tracker" role="tabpanel" aria-labelledby="tab-tracker">
+    <div class="stats-period" id="stats-period"></div>
+    <div class="stats-row" id="stats-row"></div>
 
-  </div>
+    <div class="nav">
+      <button class="nav-btn" id="btn-prev" onclick="navigate(-1)" aria-label="Назад">←</button>
+      <span class="nav-title" id="nav-title"></span>
+      <button class="nav-btn" id="btn-next" onclick="navigate(1)" aria-label="Вперёд">→</button>
+      <div class="view-toggle" role="tablist" aria-label="Период">
+        <button class="view-btn" id="btn-week" onclick="setView('week')" role="tab">Нед.</button>
+        <button class="view-btn" id="btn-month" onclick="setView('month')" role="tab">Мес.</button>
+        <button class="view-btn" id="btn-year" onclick="setView('year')" role="tab">Год</button>
+      </div>
+    </div>
 
-  <div class="stats-period" id="stats-period"></div>
-  <div class="stats-row" id="stats-row"></div>
+    <div id="week-header" class="week-grid-header" style="display:none"></div>
+    <div class="habits-list" id="habits-list"></div>
+  </section>
 
-  <div class="nav">
-    <button class="nav-btn" id="btn-prev" onclick="navigate(-1)" aria-label="Назад">←</button>
-    <span class="nav-title" id="nav-title"></span>
-    <button class="nav-btn" id="btn-next" onclick="navigate(1)" aria-label="Вперёд">→</button>
-    <div class="view-toggle" role="tablist" aria-label="Период">
-      <button class="view-btn" id="btn-week" onclick="setView('week')" role="tab">Нед.</button>
-      <button class="view-btn" id="btn-month" onclick="setView('month')" role="tab">Мес.</button>
-      <button class="view-btn" id="btn-year" onclick="setView('year')" role="tab">Год</button>
+  <!-- ── FOCUS: цели и список из ста пунктов ───────────────────────────── -->
+  <section class="tab-panel" id="panel-focus" role="tabpanel" aria-labelledby="tab-focus" hidden>
+    <div id="hundred-card"></div>
+    <div class="goals-grid" id="goals-grid"></div>
+    <div class="section-actions">
+      <button class="btn btn-primary" id="add-goal-btn" onclick="openGoalModal()">+ Новая цель</button>
+    </div>
+  </section>
+
+  <!-- Отдельный экран одной цели: задачи внутри направления -->
+  <section class="tab-panel" id="panel-goal" role="tabpanel" hidden>
+    <button class="back-btn" onclick="closeGoal()">← К целям</button>
+    <div id="goal-detail"></div>
+  </section>
+
+  <!-- ── MONEY: доходы, расходы и графики ──────────────────────────────── -->
+  <section class="tab-panel" id="panel-money" role="tabpanel" aria-labelledby="tab-money" hidden>
+    <div class="nav">
+      <button class="nav-btn" id="money-prev" onclick="moneyNavigate(-1)" aria-label="Предыдущий месяц">←</button>
+      <span class="nav-title" id="money-title"></span>
+      <button class="nav-btn" id="money-next" onclick="moneyNavigate(1)" aria-label="Следующий месяц">→</button>
+    </div>
+    <div class="stats-row" id="money-stats"></div>
+    <div class="section-actions">
+      <button class="btn btn-expense" onclick="openTxModal('expense')">− Расход</button>
+      <button class="btn btn-income" onclick="openTxModal('income')">+ Доход</button>
+    </div>
+    <div id="money-charts"></div>
+    <div id="money-list"></div>
+  </section>
+
+  <!-- ── CREDO: принципы ───────────────────────────────────────────────── -->
+  <section class="tab-panel" id="panel-credo" role="tabpanel" aria-labelledby="tab-credo" hidden>
+    <div id="credo-today"></div>
+    <div id="credo-list"></div>
+    <div class="section-actions">
+      <button class="btn btn-primary" id="add-credo-btn" onclick="openCredoModal()">+ Новый принцип</button>
+    </div>
+  </section>
+
+  <!-- ── QUOTES: цитаты ────────────────────────────────────────────────── -->
+  <section class="tab-panel" id="panel-quotes" role="tabpanel" aria-labelledby="tab-quotes" hidden>
+    <div class="quote-card" onclick="nextQuote()">
+      <div class="quote-text" id="quote-text"></div>
+      <div class="quote-author" id="quote-author"></div>
+    </div>
+    <div id="quotes-list"></div>
+    <div class="section-actions">
+      <button class="btn btn-primary" id="add-quote-btn" onclick="openQuoteModal()">+ Своя цитата</button>
+    </div>
+  </section>
+
+  <div class="signature">@is_laforge</div>
+</div>
+
+<!-- ── НИЖНЕЕ МЕНЮ ─────────────────────────────────────────────────────── -->
+<nav class="tabbar" id="tabbar" role="tablist" aria-label="Разделы" style="display:none">
+  <button class="tab-btn" id="tab-focus" role="tab" aria-selected="false" aria-controls="panel-focus" onclick="setTab('focus')">
+    <span class="tab-ico">🎯</span><span class="tab-lbl">Focus</span>
+  </button>
+  <button class="tab-btn" id="tab-money" role="tab" aria-selected="false" aria-controls="panel-money" onclick="setTab('money')">
+    <span class="tab-ico">💰</span><span class="tab-lbl">Money</span>
+  </button>
+  <button class="tab-btn active" id="tab-tracker" role="tab" aria-selected="true" aria-controls="panel-tracker" onclick="setTab('tracker')">
+    <span class="tab-ico">✅</span><span class="tab-lbl">Tracker</span>
+  </button>
+  <button class="tab-btn" id="tab-credo" role="tab" aria-selected="false" aria-controls="panel-credo" onclick="setTab('credo')">
+    <span class="tab-ico">🧭</span><span class="tab-lbl">Credo</span>
+  </button>
+  <button class="tab-btn" id="tab-quotes" role="tab" aria-selected="false" aria-controls="panel-quotes" onclick="setTab('quotes')">
+    <span class="tab-ico">💬</span><span class="tab-lbl">Quotes</span>
+  </button>
+</nav>
+
+<!-- ── МОДАЛКА ЦЕЛИ ────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="goal-modal">
+  <div class="modal">
+    <h2 id="goal-modal-title">Новая цель</h2>
+    <div class="field-row">
+      <button class="edit-icon-btn" id="goal-icon-btn" onclick="openGoalEmoji(this)" title="Значок" aria-label="Выбрать значок">🎯</button>
+      <input class="add-input" id="goal-name" placeholder="Название цели" maxlength="40">
+    </div>
+    <div class="color-row" id="goal-colors"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeGoalModal()">Отмена</button>
+      <button class="btn btn-primary" id="goal-save-btn" onclick="saveGoalModal()">Сохранить</button>
     </div>
   </div>
+</div>
 
-  <div id="week-header" class="week-grid-header" style="display:none"></div>
-  <div class="habits-list" id="habits-list"></div>
-  <div style="text-align:center;margin-top:32px;padding-bottom:8px;font-size:12px;color:var(--text3);letter-spacing:0.04em">@is_laforge</div>
+<!-- ── МОДАЛКА ОПЕРАЦИИ ────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="tx-modal">
+  <div class="modal">
+    <h2 id="tx-modal-title">Расход</h2>
+    <input class="add-input amount-input" id="tx-amount" type="text" inputmode="decimal"
+           placeholder="0" autocomplete="off">
+    <div class="cat-row" id="tx-categories"></div>
+    <div class="field-row">
+      <input class="add-input" id="tx-date" type="date">
+    </div>
+    <div class="field-row">
+      <input class="add-input" id="tx-note" placeholder="Заметка (необязательно)" maxlength="80">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="tx-delete-btn" onclick="deleteTxFromModal()" style="display:none">Удалить</button>
+      <button class="btn btn-secondary" onclick="closeTxModal()">Отмена</button>
+      <button class="btn btn-primary" id="tx-save-btn" onclick="saveTxModal()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── УНИВЕРСАЛЬНАЯ МОДАЛКА ВВОДА (кредо, цитаты, пункты списка) ───────── -->
+<div class="modal-overlay" id="text-modal">
+  <div class="modal">
+    <h2 id="text-modal-title">Добавить</h2>
+    <textarea class="add-input text-area" id="text-modal-input" rows="3" maxlength="280"></textarea>
+    <input class="add-input" id="text-modal-extra" placeholder="Автор" maxlength="60" style="display:none">
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="text-modal-delete" onclick="deleteFromTextModal()" style="display:none">Удалить</button>
+      <button class="btn btn-secondary" onclick="closeTextModal()">Отмена</button>
+      <button class="btn btn-primary" id="text-modal-save" onclick="saveTextModal()">Сохранить</button>
+    </div>
+  </div>
 </div>
 
 <script src="/app.js"></script>

@@ -28,6 +28,8 @@ function leaveDemo(){
   data = {};
   marksValues = {};
   HABITS = cloneDefaults();
+  sections = {goals: [], list100: [], credo: [], quotes: []};
+  txs = [];
   document.getElementById('demo-banner').style.display = 'none';
   showScreen('auth');
 }
@@ -37,6 +39,7 @@ function enterDemo(){
   currentUser = null;
   HABITS = cloneDefaults();
   seedDemoData();
+  seedDemoSections();
   document.getElementById('demo-banner').style.display = 'flex';
   // Set demo avatar
   const av = document.getElementById('user-avatar');
@@ -47,8 +50,110 @@ function enterDemo(){
   av.style.fontSize = '18px';
   document.getElementById('user-email-display').textContent = 'Демо-режим';
   showScreen('app');
-  render();
+  initTabs();
   setSyncStatus('демо — данные не сохраняются', false);
+}
+
+// Демо наполняет и остальные разделы: пустой экран «Целей» или «Денег»
+// выглядел бы поломкой, а посмотреть на приложение приходят именно за тем,
+// как оно живёт с данными.
+function seedDemoSections(){
+  sections = {
+    goals: [
+      {id:'demo-g1', name:'Спорт', icon:'🏋️', color:'#378ADD', tasks:[
+        {id:'demo-t1', text:'60 кг — новый вес', done:false},
+        {id:'demo-t2', text:'Режим сна', done:true},
+        {id:'demo-t3', text:'Тренировки 3 раза в неделю', done:true},
+        {id:'demo-t4', text:'Больше есть + протеин', done:false}
+      ]},
+      {id:'demo-g2', name:'Бизнес', icon:'💼', color:'#1D9E75', tasks:[
+        {id:'demo-t5', text:'Три клиента на сопровождении', done:true},
+        {id:'demo-t6', text:'Сайт студии', done:false},
+        {id:'demo-t7', text:'Прайс на пакеты работ', done:false}
+      ]},
+      {id:'demo-g3', name:'Английский', icon:'🌍', color:'#BA7517', tasks:[
+        {id:'demo-t8', text:'Смотреть без субтитров', done:false},
+        {id:'demo-t9', text:'Созвон с носителем раз в неделю', done:true}
+      ]},
+      {id:'demo-g4', name:'Пианино', icon:'🎹', color:'#7F77DD', tasks:[
+        {id:'demo-t10', text:'Разобрать первую пьесу', done:true},
+        {id:'demo-t11', text:'Играть по памяти', done:false}
+      ]}
+    ],
+    list100: [
+      {id:'demo-h1', text:'Увидеть северное сияние', done:false},
+      {id:'demo-h2', text:'Пробежать полумарафон', done:true},
+      {id:'demo-h3', text:'Выучить второй язык', done:false},
+      {id:'demo-h4', text:'Съездить в Японию', done:true},
+      {id:'demo-h5', text:'Научиться играть на пианино', done:false},
+      {id:'demo-h6', text:'Прыгнуть с парашютом', done:true},
+      {id:'demo-h7', text:'Написать книгу', done:false},
+      {id:'demo-h8', text:'Пройти маршрут в горах', done:false}
+    ],
+    credo: [
+      {id:'demo-c1', text:'Сначала делаю самое неприятное'},
+      {id:'demo-c2', text:'Обещание себе — такое же обещание, как другим'},
+      {id:'demo-c3', text:'Считаю деньги, а не надеюсь на них'},
+      {id:'demo-c4', text:'Ошибка — это данные, а не приговор'}
+    ],
+    quotes: [
+      {id:'demo-q1', text:'Дисциплина — это выбор между тем, чего хочешь сейчас, и тем, чего хочешь больше всего.', author:'', fav:true},
+      {id:'demo-q2', text:'Ты не поднимаешься до уровня своих целей, ты падаешь до уровня своих систем.', author:'Джеймс Клир', fav:false}
+    ]
+  };
+
+  // Отметки «следовал принципу» — за последние три недели, с пропусками.
+  const rnd = s => { const x = Math.sin(s) * 10000; return x - Math.floor(x); };
+  sections.credo.forEach((c, ci)=>{
+    const cur = new Date(ty, tm, td);
+    cur.setDate(cur.getDate() - 20);
+    for(let i = 0; i < 21; i++){
+      if(rnd(ci * 31 + i * 7 + 1) < 0.72){
+        data[dkey(cur.getFullYear(), cur.getMonth(), cur.getDate(), c.id)] = true;
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+  });
+
+  seedDemoMoney();
+}
+
+// Полгода операций: без истории графики пустые и раздел непонятен.
+function seedDemoMoney(){
+  txs = [];
+  const rnd = s => { const x = Math.sin(s) * 10000; return x - Math.floor(x); };
+  const expCats = ['food','home','transport','health','fun','shopping','subs','study'];
+
+  for(let back = 5; back >= 0; back--){
+    const base = new Date(ty, tm - back, 1);
+    const y = base.getFullYear(), m = base.getMonth();
+    const daysInMonth = (back === 0) ? td : new Date(y, m + 1, 0).getDate();
+
+    // Доход: зарплата и клиенты студии.
+    txs.push({id:'demo-in-' + back + '-1', ts: isoDate(new Date(y, m, Math.min(5, daysInMonth))),
+              amount: 18000000 + Math.round(rnd(back + 3) * 400000), kind:'income',
+              category:'salary', note:'Основной доход'});
+    if(rnd(back * 5 + 2) < 0.8){
+      txs.push({id:'demo-in-' + back + '-2', ts: isoDate(new Date(y, m, Math.min(18, daysInMonth))),
+                amount: 4000000 + Math.round(rnd(back * 7 + 4) * 6000000), kind:'income',
+                category:'clients', note:'Проект студии'});
+    }
+
+    // Расходы: от четырёх до девяти операций в неделю.
+    for(let d = 1; d <= daysInMonth; d++){
+      const n = rnd(back * 101 + d * 13) < 0.55 ? 1 : (rnd(back * 57 + d * 3) < 0.25 ? 2 : 0);
+      for(let k = 0; k < n; k++){
+        const seed = back * 1000 + d * 10 + k;
+        const cat = expCats[Math.floor(rnd(seed) * expCats.length)];
+        const amount = 30000 + Math.round(rnd(seed + 0.5) * 900000);
+        txs.push({id:'demo-ex-' + seed, ts: isoDate(new Date(y, m, d)),
+                  amount: amount, kind:'expense', category: cat, note:''});
+      }
+    }
+  }
+  txs.sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
+  moneyLoaded = true;
+  moneyTableMissing = false;
 }
 
 // ── SUPABASE ──────────────────────────────────────────────────────────────
@@ -286,6 +391,16 @@ function closeEmojiPicker(){
 
 function pickEmoji(emoji){
   if(activeEmojiIdx === null) return;
+  // Индекс -1 означает, что значок выбирают для цели, а не для привычки:
+  // выбор эмодзи один на всё приложение, дублировать его незачем.
+  if(activeEmojiIdx === -1){
+    if(goalDraft){
+      goalDraft.icon = emoji;
+      document.getElementById('goal-icon-btn').textContent = emoji;
+    }
+    closeEmojiPicker();
+    return;
+  }
   editBuffer[activeEmojiIdx].icon = emoji;
   closeEmojiPicker();
   renderEditor();
@@ -442,8 +557,14 @@ async function loadData(){
     if(migration) await pushMigration(migration);
     if(habitsChanged) await saveHabitsToServer();
 
+    // Остальные разделы: цели, список ста, принципы, цитаты и операции.
+    // Их сбой не должен ломать загрузку привычек, поэтому они грузятся
+    // после и каждый молча откатывается на локальную копию.
+    await loadSections();
+    await loadTransactions();
+
     setSyncStatus('синхронизировано ✓', true);
-    render();
+    renderCurrent();
     flushQueue();
   }catch(e){
     setSyncStatus(e.message==='timeout'?'таймаут — используем кэш':'нет сети', false);
@@ -1348,7 +1469,13 @@ function closeModal(){
 document.addEventListener('keydown', e=>{
   if(e.key !== 'Escape') return;
   if(document.getElementById('emoji-picker').classList.contains('open')){ closeEmojiPicker(); return; }
-  if(document.getElementById('edit-modal').classList.contains('open')) closeModal();
+  if(document.getElementById('edit-modal').classList.contains('open')){ closeModal(); return; }
+  // Модалки разделов закрываются тем же Esc: каждая знает, как убраться
+  // за собой, поэтому вызываем её собственный обработчик.
+  const closers = {'goal-modal': closeGoalModal, 'tx-modal': closeTxModal, 'text-modal': closeTextModal};
+  for(const id in closers){
+    if(document.getElementById(id).classList.contains('open')){ closers[id](); return; }
+  }
   const crop = document.getElementById('crop-overlay');
   if(crop) crop.remove();
 });
@@ -1357,9 +1484,11 @@ document.addEventListener('keydown', e=>{
 // под ней, не понимая, где находишься.
 document.addEventListener('keydown', e=>{
   if(e.key !== 'Tab') return;
-  const m = document.getElementById('edit-modal');
-  if(!m.classList.contains('open')) return;
-  const items = m.querySelectorAll('button, input, select, [tabindex]:not([tabindex="-1"])');
+  // Ловушка работает для любой открытой модалки, а не только для редактора
+  // привычек: разделов стало пять, модалок — четыре.
+  const m = document.querySelector('.modal-overlay.open');
+  if(!m) return;
+  const items = m.querySelectorAll('button:not([style*="display:none"]), input, select, textarea, [tabindex]:not([tabindex="-1"])');
   if(!items.length) return;
   const first = items[0], last = items[items.length-1];
   if(e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
@@ -1944,12 +2073,19 @@ function exportData(){
   document.getElementById('user-menu').classList.remove('open');
   const payload = {
     format: 'habit-tracker',
-    version: 3,
+    version: 4,
     exportedAt: new Date().toISOString(),
     email: (currentUser && currentUser.email) || null,
     habits: HABITS,          // вместе с графиком, целью и признаком архива
     marks: data,
-    values: marksValues      // числа количественных привычек
+    values: marksValues,     // числа количественных привычек
+    // Версия 4: остальные разделы. Операции выгружаются вместе со всем
+    // остальным — иначе «скачать данные» перестало бы означать «все данные».
+    goals: sections.goals,
+    list100: sections.list100,
+    credo: sections.credo,
+    quotes: sections.quotes,
+    transactions: txs
   };
   try{
     const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
@@ -2015,8 +2151,43 @@ function importData(e){
       try{ localStorage.setItem(valuesKey(), JSON.stringify(marksValues)); }catch(e){}
     }
 
-    render();
-    toast('Загружено ' + incoming.length + ' отметок' + (vals ? ' и ' + vals + ' значений' : ''));
+    // Разделы из файла версии 4. Записи добавляются к существующим, а не
+    // заменяют их: импорт не должен стирать то, что уже накоплено.
+    let added = 0;
+    SECTION_KEYS.forEach(key=>{
+      const list = payload[key];
+      if(!Array.isArray(list) || !list.length) return;
+      const known = new Set(sections[key].map(x => x && x.id));
+      list.forEach(item=>{
+        if(!item || (!item.text && !item.name)) return;
+        if(!item.id) item.id = newId(key.slice(0, 2));
+        if(known.has(item.id)) return;
+        sections[key].push(item);
+        known.add(item.id);
+        added++;
+      });
+      saveSection(key);
+    });
+
+    // Операции: тоже по id, чтобы повторный импорт не задвоил месяц трат.
+    let txAdded = 0;
+    if(Array.isArray(payload.transactions)){
+      const knownTx = new Set(txs.map(t => t.id));
+      payload.transactions.forEach(t=>{
+        if(!t || !t.id || !t.ts || !t.amount || knownTx.has(t.id)) return;
+        txs.push(t);
+        knownTx.add(t.id);
+        txAdded++;
+        if(currentUser && !isDemoMode) pushTx(t);
+      });
+      txs.sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
+    }
+
+    renderCurrent();
+    toast('Загружено ' + incoming.length + ' отметок' +
+          (vals ? ', ' + vals + ' значений' : '') +
+          (added ? ', ' + added + ' записей разделов' : '') +
+          (txAdded ? ', ' + txAdded + ' операций' : ''));
 
     if(currentUser && !isDemoMode){
       if(hasHabits) await saveHabitsToServer();
@@ -2026,6 +2197,986 @@ function importData(e){
   };
   reader.onerror = ()=>toast('Не удалось прочитать файл', true);
   reader.readAsText(file);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   РАЗДЕЛЫ ПРИЛОЖЕНИЯ
+   Focus (цели и список из ста пунктов), Credo, Quotes и Money.
+   Первые три хранятся так же, как список привычек: одним JSON в
+   user_settings — схему базы менять не пришлось. Деньги живут в
+   отдельной таблице transactions: операций много, их нужно фильтровать
+   по датам и складывать, а JSON-строка перезаписывается целиком и две
+   открытые вкладки затирали бы друг друга.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+// Данные разделов. Пустые массивы — валидное состояние: раздел покажет
+// пустое состояние с кнопкой действия, а не сломанный экран.
+let sections = {goals: [], list100: [], credo: [], quotes: []};
+const SECTION_KEYS = ['goals', 'list100', 'credo', 'quotes'];
+
+function sectionKey(key){ return 'sec_' + key + '_' + ((currentUser && currentUser.id) || 'anon'); }
+
+function readSectionLocal(key){
+  try{
+    const raw = localStorage.getItem(sectionKey(key));
+    const v = raw ? JSON.parse(raw) : null;
+    return Array.isArray(v) ? v : [];
+  }catch(e){ return []; }
+}
+
+function writeSectionLocal(key){
+  try{ localStorage.setItem(sectionKey(key), JSON.stringify(sections[key])); }catch(e){}
+}
+
+// Сохранение с задержкой: правка списка задач — это серия быстрых
+// изменений, и каждое незачем отправлять отдельным запросом.
+const sectionTimers = {};
+function saveSection(key){
+  writeSectionLocal(key);
+  if(!currentUser || isDemoMode) return;
+  clearTimeout(sectionTimers[key]);
+  sectionTimers[key] = setTimeout(()=>pushSection(key), 1200);
+}
+
+async function pushSection(key){
+  if(!currentUser || isDemoMode) return;
+  try{
+    const res = await sbFetchWithTimeout(()=>
+      sb.from('user_settings').upsert(
+        {user_id: currentUser.id, key: key, value: JSON.stringify(sections[key]),
+         updated_at: new Date().toISOString()},
+        {onConflict:'user_id,key'}
+      )
+    );
+    // Клиент Supabase не бросает исключение — ошибку возвращает в res.error.
+    if(res.error) throw new Error(res.error.message);
+    setSyncStatus('синхронизировано ✓', true);
+    setTimeout(()=>setSyncStatus('', false), 1500);
+  }catch(e){
+    setSyncStatus('раздел сохранён локально', false);
+  }
+}
+
+async function loadSections(){
+  SECTION_KEYS.forEach(k=>{ sections[k] = readSectionLocal(k); });
+  if(!currentUser || isDemoMode) return;
+  try{
+    const res = await sbFetchWithTimeout(()=>
+      sb.from('user_settings').select('key,value').eq('user_id', currentUser.id).in('key', SECTION_KEYS)
+    );
+    if(res.error) return;                       // остаются локальные данные
+    (res.data || []).forEach(row=>{
+      if(SECTION_KEYS.indexOf(row.key) === -1 || !row.value) return;
+      try{
+        const parsed = JSON.parse(row.value);
+        if(Array.isArray(parsed)){ sections[row.key] = parsed; writeSectionLocal(row.key); }
+      }catch(e){ /* битую запись игнорируем, локальная версия важнее */ }
+    });
+  }catch(e){ /* нет сети — работаем с локальными */ }
+}
+
+function newId(prefix){
+  return prefix + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+}
+
+// ── ВКЛАДКИ ───────────────────────────────────────────────────────────────
+// Пять разделов внизу. Экран одной цели — не вкладка, а вложенный экран:
+// в меню он не показывается, но по нему работает та же механика панелей.
+const TABS = {
+  focus:   {title:'Focus',   panel:'panel-focus',   render:()=>renderFocus()},
+  money:   {title:'Money',   panel:'panel-money',   render:()=>renderMoney()},
+  tracker: {title:'Tracker', panel:'panel-tracker', render:()=>render()},
+  credo:   {title:'Credo',   panel:'panel-credo',   render:()=>renderCredo()},
+  quotes:  {title:'Quotes',  panel:'panel-quotes',  render:()=>renderQuotes()}
+};
+let currentTab = 'tracker';
+let openGoalId = null;      // если не null — открыт экран конкретной цели
+
+function setTab(name, opts){
+  if(!TABS[name]) name = 'tracker';
+  currentTab = name;
+  openGoalId = null;
+  try{ localStorage.setItem('tab', name); }catch(e){}
+
+  Object.keys(TABS).forEach(k=>{
+    document.getElementById(TABS[k].panel).hidden = (k !== name);
+    const btn = document.getElementById('tab-' + k);
+    btn.classList.toggle('active', k === name);
+    btn.setAttribute('aria-selected', k === name ? 'true' : 'false');
+  });
+  document.getElementById('panel-goal').hidden = true;
+  document.getElementById('screen-title').textContent = TABS[name].title;
+
+  // Шестерёнка правит привычки и на других разделах бессмысленна.
+  document.getElementById('edit-btn').style.display = (name === 'tracker') ? '' : 'none';
+
+  TABS[name].render();
+  if(!opts || !opts.keepScroll) window.scrollTo(0, 0);
+}
+
+function initTabs(){
+  document.getElementById('tabbar').style.display = 'flex';
+  let saved = null;
+  try{ saved = localStorage.getItem('tab'); }catch(e){}
+  setTab(TABS[saved] ? saved : 'tracker');
+}
+
+// Перерисовать текущий раздел, не трогая остальные.
+function renderCurrent(){
+  if(openGoalId){ renderGoalDetail(); return; }
+  const t = TABS[currentTab];
+  if(t) t.render();
+}
+
+// ── ОБЩИЕ ЭЛЕМЕНТЫ РАЗДЕЛОВ ───────────────────────────────────────────────
+function emptyBlock(emoji, title, text, btnLabel, onClick){
+  return '<div class="empty-section">' +
+    '<div class="empty-emoji">' + emoji + '</div>' +
+    '<h3>' + esc(title) + '</h3>' +
+    '<p>' + esc(text) + '</p>' +
+    (btnLabel ? '<button class="btn btn-primary" style="margin-top:16px" onclick="' + onClick + '">' +
+                esc(btnLabel) + '</button>' : '') +
+    '</div>';
+}
+
+/* ═══════════════ FOCUS: цели и список из ста пунктов ═══════════════ */
+
+const HUNDRED_ID = '__100__';   // список ста живёт как особая «цель»
+
+function goalById(id){ return sections.goals.find(g => g.id === id) || null; }
+
+function goalProgress(g){
+  const tasks = (g && g.tasks) || [];
+  const done = tasks.filter(t => t.done).length;
+  return {done, total: tasks.length, pct: tasks.length ? Math.round(done / tasks.length * 100) : 0};
+}
+
+function renderFocus(){
+  // Карточка списка ста — всегда первая: это самая длинная цель.
+  const list = sections.list100;
+  const done = list.filter(i => i.done).length;
+  const dots = [];
+  for(let i = 0; i < 100; i++){
+    dots.push('<span class="' + (i < done ? 'done' : '') + '"></span>');
+  }
+  document.getElementById('hundred-card').innerHTML =
+    '<button class="hundred-card" onclick="openHundred()">' +
+      '<h3>100</h3>' +
+      '<div class="hundred-sub">' + (list.length
+        ? done + ' из ' + list.length + ' сделано'
+        : 'список того, что стоит успеть') + '</div>' +
+      '<div class="hundred-dots">' + dots.join('') + '</div>' +
+    '</button>';
+
+  const grid = document.getElementById('goals-grid');
+  if(!sections.goals.length){
+    grid.innerHTML = emptyBlock('🎯', 'Целей пока нет',
+      'Направление — это несколько задач с общим смыслом: спорт, бизнес, язык. Начните с одного.',
+      '+ Новая цель', 'openGoalModal()');
+    return;
+  }
+
+  grid.innerHTML = sections.goals.map(g=>{
+    const p = goalProgress(g);
+    return '<button class="goal-card" style="background:' + esc(g.color || '#7F77DD') + '"' +
+      ' onclick="openGoal(\'' + esc(g.id) + '\')">' +
+      '<div class="goal-ico">' + esc(g.icon || '🎯') + '</div>' +
+      '<div>' +
+        '<div class="goal-name">' + esc(g.name) + '</div>' +
+        '<div class="goal-sub">' + (p.total ? p.done + ' из ' + p.total + ' задач' : 'нет задач') + '</div>' +
+      '</div>' +
+      '<div class="goal-bar"><i style="width:' + p.pct + '%"></i></div>' +
+    '</button>';
+  }).join('');
+}
+
+// ── Экран одной цели ──────────────────────────────────────────────────────
+function openGoal(id){
+  openGoalId = id;
+  Object.keys(TABS).forEach(k=>{ document.getElementById(TABS[k].panel).hidden = true; });
+  document.getElementById('panel-goal').hidden = false;
+  document.getElementById('edit-btn').style.display = 'none';
+  renderGoalDetail();
+  window.scrollTo(0, 0);
+}
+
+function closeGoal(){ setTab('focus'); }
+
+function renderGoalDetail(){
+  const box = document.getElementById('goal-detail');
+  const hundred = openGoalId === HUNDRED_ID;
+  const g = hundred ? null : goalById(openGoalId);
+
+  if(!hundred && !g){ setTab('focus'); return; }
+
+  const items = hundred ? sections.list100 : (g.tasks || []);
+  const done = items.filter(t => t.done).length;
+  const title = hundred ? '100' : g.name;
+  const icon = hundred ? '💯' : (g.icon || '🎯');
+  const sub = hundred
+    ? done + ' из ' + (items.length || 100) + ' сделано'
+    : (items.length ? done + ' из ' + items.length + ' задач' : 'нет задач');
+
+  document.getElementById('screen-title').textContent = hundred ? '100' : 'Focus';
+
+  const rows = items.map(t=>
+    '<div class="task-row' + (t.done ? ' done' : '') + '">' +
+      '<button type="button" class="task-check" role="checkbox"' +
+        ' aria-checked="' + (t.done ? 'true' : 'false') + '"' +
+        ' aria-label="' + esc(t.text) + '"' +
+        ' onclick="toggleTask(\'' + esc(t.id) + '\')">' + (t.done ? '✓' : '') + '</button>' +
+      '<span class="task-text" onclick="editTask(\'' + esc(t.id) + '\')">' + esc(t.text) + '</span>' +
+      '<button class="task-del" onclick="deleteTask(\'' + esc(t.id) + '\')"' +
+        ' aria-label="Удалить">✕</button>' +
+    '</div>').join('');
+
+  box.innerHTML =
+    '<div class="goal-head">' +
+      '<div class="goal-ico">' + esc(icon) + '</div>' +
+      '<div style="flex:1">' +
+        '<h2>' + esc(title) + '</h2>' +
+        '<div class="goal-sub">' + esc(sub) + '</div>' +
+      '</div>' +
+      (hundred ? '' :
+        '<button class="icon-btn" onclick="openGoalModal(\'' + esc(g.id) + '\')"' +
+        ' aria-label="Изменить цель">✏️</button>') +
+    '</div>' +
+    (items.length ? rows : emptyBlock(hundred ? '💯' : '📝',
+        hundred ? 'Список пуст' : 'Задач пока нет',
+        hundred ? 'Сто пунктов пишутся годами. Первый — прямо сейчас.'
+                : 'Разбейте цель на шаги, которые можно закрыть за раз.',
+        '', '')) +
+    '<div class="section-actions">' +
+      '<button class="btn btn-primary" onclick="addTask()">+ ' +
+        (hundred ? 'Новый пункт' : 'Новая задача') + '</button>' +
+      (hundred ? '' :
+        '<button class="btn btn-danger" onclick="deleteGoal(\'' + esc(g.id) + '\')">Удалить цель</button>') +
+    '</div>';
+}
+
+// Задачи цели и пункты списка ста устроены одинаково, поэтому и код общий.
+function currentItems(){
+  return openGoalId === HUNDRED_ID ? sections.list100 : ((goalById(openGoalId) || {}).tasks || []);
+}
+function currentSectionName(){ return openGoalId === HUNDRED_ID ? 'list100' : 'goals'; }
+
+function toggleTask(id){
+  const t = currentItems().find(x => x.id === id);
+  if(!t) return;
+  t.done = !t.done;
+  t.doneAt = t.done ? new Date().toISOString() : null;
+  saveSection(currentSectionName());
+  renderGoalDetail();
+  if(t.done && !REDUCED_MOTION) launchConfetti(false);
+}
+
+function addTask(){
+  const hundred = openGoalId === HUNDRED_ID;
+  openTextModal({
+    title: hundred ? 'Новый пункт' : 'Новая задача',
+    placeholder: hundred ? 'Что стоит успеть' : 'Что нужно сделать',
+    onSave: text=>{
+      const list = currentItems();
+      list.push({id: newId('t'), text: text, done: false});
+      saveSection(currentSectionName());
+      renderGoalDetail();
+    }
+  });
+}
+
+function editTask(id){
+  const t = currentItems().find(x => x.id === id);
+  if(!t) return;
+  openTextModal({
+    title: 'Изменить',
+    value: t.text,
+    onSave: text=>{ t.text = text; saveSection(currentSectionName()); renderGoalDetail(); },
+    onDelete: ()=>deleteTask(id)
+  });
+}
+
+function deleteTask(id){
+  const list = currentItems();
+  const i = list.findIndex(x => x.id === id);
+  if(i === -1) return;
+  const removed = list.splice(i, 1)[0];
+  saveSection(currentSectionName());
+  renderGoalDetail();
+  // Удаление без отмены — самая частая причина потерянных данных.
+  toast('Удалено: ' + removed.text, false, ()=>{
+    list.splice(i, 0, removed);
+    saveSection(currentSectionName());
+    renderGoalDetail();
+  });
+}
+
+function openHundred(){ openGoal(HUNDRED_ID); }
+
+// ── Модалка цели ──────────────────────────────────────────────────────────
+let goalDraft = null;
+
+function openGoalModal(id){
+  lastFocused = document.activeElement;
+  const g = id ? goalById(id) : null;
+  goalDraft = g
+    ? {id: g.id, name: g.name, icon: g.icon || '🎯', color: g.color || COLOR_POOL[0]}
+    : {id: null, name: '', icon: '🎯', color: COLOR_POOL[sections.goals.length % COLOR_POOL.length]};
+
+  document.getElementById('goal-modal-title').textContent = g ? 'Изменить цель' : 'Новая цель';
+  document.getElementById('goal-name').value = goalDraft.name;
+  document.getElementById('goal-icon-btn').textContent = goalDraft.icon;
+  document.getElementById('goal-colors').innerHTML = COLOR_POOL.map(c=>
+    '<button class="color-dot" style="background:' + c + '"' +
+    ' aria-pressed="' + (c === goalDraft.color ? 'true' : 'false') + '"' +
+    ' aria-label="Цвет"' +
+    ' onclick="pickGoalColor(\'' + c + '\')"></button>').join('');
+
+  const m = document.getElementById('goal-modal');
+  m.classList.add('open');
+  m.setAttribute('aria-modal','true');
+  m.setAttribute('role','dialog');
+  document.getElementById('goal-name').focus();
+}
+
+function pickGoalColor(c){
+  goalDraft.color = c;
+  Array.from(document.getElementById('goal-colors').children).forEach(b=>{
+    b.setAttribute('aria-pressed', b.style.backgroundColor === hexToRgb(c) ? 'true' : 'false');
+  });
+  // Сравнение цветов через style ненадёжно, поэтому перерисовываем честно.
+  document.getElementById('goal-colors').innerHTML = COLOR_POOL.map(x=>
+    '<button class="color-dot" style="background:' + x + '"' +
+    ' aria-pressed="' + (x === goalDraft.color ? 'true' : 'false') + '"' +
+    ' aria-label="Цвет"' +
+    ' onclick="pickGoalColor(\'' + x + '\')"></button>').join('');
+}
+
+function hexToRgb(hex){
+  const n = parseInt(hex.slice(1), 16);
+  return 'rgb(' + ((n >> 16) & 255) + ', ' + ((n >> 8) & 255) + ', ' + (n & 255) + ')';
+}
+
+function openGoalEmoji(btn){
+  // Переиспользуем общий выбор эмодзи: индекс -1 означает «цель».
+  openEmojiPicker(-1, btn);
+}
+
+function closeGoalModal(){
+  document.getElementById('goal-modal').classList.remove('open');
+  goalDraft = null;
+  if(lastFocused && lastFocused.focus) lastFocused.focus();
+}
+
+function saveGoalModal(){
+  const name = document.getElementById('goal-name').value.trim();
+  if(!name){ toast('Название цели не может быть пустым', true); return; }
+
+  if(goalDraft.id){
+    const g = goalById(goalDraft.id);
+    if(g){ g.name = name; g.icon = goalDraft.icon; g.color = goalDraft.color; }
+  } else {
+    sections.goals.push({id: newId('g'), name: name, icon: goalDraft.icon,
+                         color: goalDraft.color, tasks: []});
+  }
+  saveSection('goals');
+  closeGoalModal();
+  if(openGoalId) renderGoalDetail(); else renderFocus();
+}
+
+function deleteGoal(id){
+  const i = sections.goals.findIndex(g => g.id === id);
+  if(i === -1) return;
+  const g = sections.goals[i];
+  const count = (g.tasks || []).length;
+  if(count && !confirm('Удалить цель «' + g.name + '» вместе с ' + count + ' задачами?')) return;
+
+  const removed = sections.goals.splice(i, 1)[0];
+  saveSection('goals');
+  setTab('focus');
+  toast('Цель удалена: ' + removed.name, false, ()=>{
+    sections.goals.splice(i, 0, removed);
+    saveSection('goals');
+    renderFocus();
+  });
+}
+
+/* ═══════════════ CREDO: принципы ═══════════════ */
+
+// Отметка «сегодня следовал» кладётся в ту же таблицу habits тем же ключом
+// год/месяц/день/<id>, что и привычки: очередь офлайн-отправки, серии и
+// синхронизация начинают работать даром. В список привычек принципы не
+// попадают, поэтому статистику трекера они не искажают.
+function credoKey(c, date){
+  const d = date || new Date(ty, tm, td);
+  return dkey(d.getFullYear(), d.getMonth(), d.getDate(), c.id);
+}
+
+function credoOfDay(){
+  const list = sections.credo;
+  if(!list.length) return null;
+  // Детерминированный выбор по дате: один и тот же принцип весь день.
+  const seed = ty * 10000 + tm * 100 + td;
+  return list[seed % list.length];
+}
+
+function renderCredo(){
+  const box = document.getElementById('credo-list');
+  const today = credoOfDay();
+
+  document.getElementById('credo-today').innerHTML = today
+    ? '<div class="credo-today">' +
+        '<div class="ct-label">Принцип дня</div>' +
+        '<div class="ct-text">' + esc(today.text) + '</div>' +
+      '</div>'
+    : '';
+
+  if(!sections.credo.length){
+    box.innerHTML = emptyBlock('🧭', 'Принципов пока нет',
+      'Правила, по которым вы живёте. Каждый вечер можно отметить, следовали ли вы им сегодня.',
+      '+ Новый принцип', 'openCredoModal()');
+    return;
+  }
+
+  box.innerHTML = sections.credo.map(c=>{
+    const k = credoKey(c);
+    const done = !!data[k];
+    const streak = getStreak({id: c.id, name: c.text, color: '#000'});
+    return '<div class="credo-row">' +
+      '<button type="button" class="task-check" role="checkbox"' +
+        ' aria-checked="' + (done ? 'true' : 'false') + '"' +
+        ' aria-label="Следовал сегодня: ' + esc(c.text) + '"' +
+        ' onclick="toggleCredo(\'' + esc(c.id) + '\')">' + (done ? '✓' : '') + '</button>' +
+      '<div style="flex:1">' +
+        '<div class="cr-text" onclick="editCredo(\'' + esc(c.id) + '\')">' + esc(c.text) + '</div>' +
+        (streak >= 2
+          ? '<div class="cr-streak">🔥 ' + streak + ' ' + plural(streak, 'день', 'дня', 'дней') + ' подряд</div>'
+          : '') +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function toggleCredo(id){
+  const c = sections.credo.find(x => x.id === id);
+  if(!c) return;
+  const k = credoKey(c);
+  const on = !data[k];
+  if(on) data[k] = true; else delete data[k];
+  saveEntry(k, on);
+  renderCredo();
+  if(on && !REDUCED_MOTION) launchConfetti(false);
+}
+
+function openCredoModal(){
+  openTextModal({
+    title: 'Новый принцип',
+    placeholder: 'Например: «Сначала делаю самое неприятное»',
+    onSave: text=>{
+      sections.credo.push({id: newId('credo'), text: text});
+      saveSection('credo');
+      renderCredo();
+    }
+  });
+}
+
+function editCredo(id){
+  const c = sections.credo.find(x => x.id === id);
+  if(!c) return;
+  openTextModal({
+    title: 'Изменить принцип',
+    value: c.text,
+    onSave: text=>{ c.text = text; saveSection('credo'); renderCredo(); },
+    onDelete: ()=>{
+      const i = sections.credo.findIndex(x => x.id === id);
+      const removed = sections.credo.splice(i, 1)[0];
+      saveSection('credo');
+      renderCredo();
+      toast('Принцип удалён', false, ()=>{
+        sections.credo.splice(i, 0, removed);
+        saveSection('credo');
+        renderCredo();
+      });
+    }
+  });
+}
+
+/* ═══════════════ QUOTES: цитаты ═══════════════ */
+
+function renderQuotes(){
+  renderQuote();     // цитата дня в верхней карточке
+  const box = document.getElementById('quotes-list');
+
+  if(!sections.quotes.length){
+    box.innerHTML = emptyBlock('💬', 'Своих цитат пока нет',
+      'Сюда стоит складывать то, что хочется перечитывать. Наверху — цитата дня из встроенной подборки.',
+      '+ Своя цитата', 'openQuoteModal()');
+    return;
+  }
+
+  // Избранные — наверх: их и открывают чаще всего.
+  const list = sections.quotes.slice().sort((a, b)=> (b.fav ? 1 : 0) - (a.fav ? 1 : 0));
+  box.innerHTML = list.map(q=>
+    '<div class="quote-item">' +
+      '<div class="qi-text" onclick="editQuote(\'' + esc(q.id) + '\')">«' + esc(q.text) + '»</div>' +
+      '<div class="qi-bottom">' +
+        '<span class="qi-author">' + (q.author ? esc(q.author) : 'без автора') + '</span>' +
+        '<button class="fav-btn' + (q.fav ? ' on' : '') + '"' +
+          ' aria-label="В избранное" aria-pressed="' + (q.fav ? 'true' : 'false') + '"' +
+          ' onclick="toggleFavQuote(\'' + esc(q.id) + '\')">⭐</button>' +
+      '</div>' +
+    '</div>').join('');
+}
+
+function toggleFavQuote(id){
+  const q = sections.quotes.find(x => x.id === id);
+  if(!q) return;
+  q.fav = !q.fav;
+  saveSection('quotes');
+  renderQuotes();
+}
+
+function openQuoteModal(){
+  openTextModal({
+    title: 'Своя цитата',
+    placeholder: 'Текст цитаты',
+    withAuthor: true,
+    onSave: (text, author)=>{
+      sections.quotes.push({id: newId('q'), text: text, author: author || '', fav: false});
+      saveSection('quotes');
+      renderQuotes();
+    }
+  });
+}
+
+function editQuote(id){
+  const q = sections.quotes.find(x => x.id === id);
+  if(!q) return;
+  openTextModal({
+    title: 'Изменить цитату',
+    value: q.text,
+    author: q.author,
+    withAuthor: true,
+    onSave: (text, author)=>{
+      q.text = text; q.author = author || '';
+      saveSection('quotes');
+      renderQuotes();
+    },
+    onDelete: ()=>{
+      const i = sections.quotes.findIndex(x => x.id === id);
+      const removed = sections.quotes.splice(i, 1)[0];
+      saveSection('quotes');
+      renderQuotes();
+      toast('Цитата удалена', false, ()=>{
+        sections.quotes.splice(i, 0, removed);
+        saveSection('quotes');
+        renderQuotes();
+      });
+    }
+  });
+}
+
+/* ═══════════════ УНИВЕРСАЛЬНАЯ МОДАЛКА ВВОДА ═══════════════ */
+// Одна модалка на принципы, цитаты, задачи и пункты списка ста: у всех
+// один сценарий — ввести текст, сохранить, иногда удалить.
+let textModalState = null;
+
+function openTextModal(opts){
+  lastFocused = document.activeElement;
+  textModalState = opts;
+
+  document.getElementById('text-modal-title').textContent = opts.title || 'Добавить';
+  const input = document.getElementById('text-modal-input');
+  input.value = opts.value || '';
+  input.placeholder = opts.placeholder || '';
+
+  const extra = document.getElementById('text-modal-extra');
+  extra.style.display = opts.withAuthor ? '' : 'none';
+  extra.value = opts.author || '';
+
+  document.getElementById('text-modal-delete').style.display = opts.onDelete ? '' : 'none';
+
+  const m = document.getElementById('text-modal');
+  m.classList.add('open');
+  m.setAttribute('aria-modal','true');
+  m.setAttribute('role','dialog');
+  input.focus();
+}
+
+function closeTextModal(){
+  document.getElementById('text-modal').classList.remove('open');
+  textModalState = null;
+  if(lastFocused && lastFocused.focus) lastFocused.focus();
+}
+
+function saveTextModal(){
+  if(!textModalState) return;
+  const text = document.getElementById('text-modal-input').value.trim();
+  if(!text){ toast('Текст не может быть пустым', true); return; }
+  const author = document.getElementById('text-modal-extra').value.trim();
+  const cb = textModalState.onSave;
+  closeTextModal();
+  if(cb) cb(text, author);
+}
+
+function deleteFromTextModal(){
+  if(!textModalState || !textModalState.onDelete) return;
+  const cb = textModalState.onDelete;
+  closeTextModal();
+  cb();
+}
+
+/* ═══════════════ MONEY: доходы, расходы и графики ═══════════════ */
+
+// Категории фиксированы: набор закрывает бытовые траты и работу студии,
+// а редактор категорий на этом этапе только усложнил бы ввод.
+const MONEY_CATS = {
+  expense: [
+    {id:'food',      icon:'🍜', name:'Еда'},
+    {id:'home',      icon:'🏠', name:'Дом'},
+    {id:'transport', icon:'🚕', name:'Транспорт'},
+    {id:'health',    icon:'💊', name:'Здоровье'},
+    {id:'fun',       icon:'🎬', name:'Развлечения'},
+    {id:'shopping',  icon:'🛍️', name:'Покупки'},
+    {id:'subs',      icon:'📱', name:'Подписки'},
+    {id:'study',     icon:'📚', name:'Учёба'},
+    {id:'business',  icon:'💼', name:'Бизнес'},
+    {id:'other',     icon:'🔸', name:'Другое'}
+  ],
+  income: [
+    {id:'salary',    icon:'💵', name:'Зарплата'},
+    {id:'clients',   icon:'🤝', name:'Клиенты'},
+    {id:'sales',     icon:'🛒', name:'Продажи'},
+    {id:'percent',   icon:'📈', name:'Проценты'},
+    {id:'gift',      icon:'🎁', name:'Подарок'},
+    {id:'other_in',  icon:'🔸', name:'Другое'}
+  ]
+};
+const CURRENCY = '₽';
+
+// Суммы храним целыми в копейках: дробные рубли во float дают ошибку
+// округления, и итог месяца перестаёт сходиться с суммой строк.
+let txs = [];
+let moneyOffset = 0;         // 0 — текущий месяц, -1 — предыдущий
+let moneyLoaded = false;
+let moneyTableMissing = false;
+
+function catById(kind, id){
+  const list = MONEY_CATS[kind] || [];
+  return list.find(c => c.id === id) || list[list.length - 1];
+}
+
+function fmtMoney(cents, withSign){
+  const sign = withSign && cents > 0 ? '+' : (cents < 0 ? '−' : '');
+  const abs = Math.abs(cents);
+  const rub = Math.floor(abs / 100);
+  const kop = abs % 100;
+  const head = String(rub).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return sign + head + (kop ? ',' + String(kop).padStart(2, '0') : '') + ' ' + CURRENCY;
+}
+
+// «1 200,50», «1200.5», «1 200" — всё это одна и та же сумма.
+function parseAmount(raw){
+  const s = String(raw || '').replace(/\s/g, '').replace(',', '.').replace(/[^\d.]/g, '');
+  if(!s) return 0;
+  const v = parseFloat(s);
+  if(isNaN(v) || v <= 0) return 0;
+  return Math.round(v * 100);
+}
+
+function isoDate(d){
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' +
+         String(d.getDate()).padStart(2, '0');
+}
+
+function monthOf(offset){
+  const d = new Date(ty, tm + offset, 1);
+  return {y: d.getFullYear(), m: d.getMonth()};
+}
+
+function txInMonth(t, y, m){
+  const d = String(t.ts || '');
+  return d.slice(0, 7) === y + '-' + String(m + 1).padStart(2, '0');
+}
+
+// ── Загрузка операций ─────────────────────────────────────────────────────
+// Тянем последние 13 месяцев: этого хватает и на текущий экран, и на
+// годовой график, а объём остаётся небольшим.
+async function loadTransactions(){
+  if(isDemoMode){ moneyLoaded = true; return; }
+  if(!currentUser) return;
+
+  const from = new Date(ty, tm - 12, 1);
+  try{
+    const res = await sbFetchWithTimeout(()=>
+      sb.from('transactions')
+        .select('id,ts,amount,kind,category,note')
+        .eq('user_id', currentUser.id)
+        .gte('ts', isoDate(from))
+        .order('ts', {ascending: false})
+    );
+    if(res.error){
+      // Таблицы может не быть: раздел добавлен позже остальных.
+      if(/does not exist|relation|schema cache/i.test(res.error.message || '')){
+        moneyTableMissing = true;
+      } else {
+        setSyncStatus('деньги: ' + res.error.message, false);
+      }
+      return;
+    }
+    moneyTableMissing = false;
+    txs = res.data || [];
+    moneyLoaded = true;
+  }catch(e){
+    setSyncStatus('деньги: нет сети', false);
+  }
+}
+
+function moneyNavigate(d){
+  moneyOffset += d;
+  if(moneyOffset > 0) moneyOffset = 0;      // будущих месяцев не бывает
+  renderMoney();
+}
+
+function renderMoney(){
+  const {y, m} = monthOf(moneyOffset);
+  document.getElementById('money-title').textContent = MON_F[m] + ' ' + y;
+  document.getElementById('money-next').style.visibility = moneyOffset >= 0 ? 'hidden' : '';
+
+  const stats = document.getElementById('money-stats');
+  const charts = document.getElementById('money-charts');
+  const list = document.getElementById('money-list');
+
+  if(moneyTableMissing){
+    stats.innerHTML = '';
+    charts.innerHTML = '';
+    list.innerHTML = '<div class="empty-section">' +
+      '<div class="empty-emoji">🗄️</div>' +
+      '<h3>Таблица операций не создана</h3>' +
+      '<p>Раздел «Деньги» хранит операции в отдельной таблице Supabase. ' +
+      'Выполните SQL из README (раздел «Деньги») в SQL Editor дашборда — и обновите страницу.</p>' +
+      '</div>';
+    return;
+  }
+
+  const month = txs.filter(t => txInMonth(t, y, m));
+  const income = month.filter(t => t.kind === 'income').reduce((s, t) => s + t.amount, 0);
+  const expense = month.filter(t => t.kind === 'expense').reduce((s, t) => s + t.amount, 0);
+  const balance = income - expense;
+
+  // День месяца, по который считаем средний расход: у прошлых месяцев он
+  // полный, у текущего — только прожитая часть.
+  const isCurrent = moneyOffset === 0;
+  const daysPassed = isCurrent ? td : new Date(y, m + 1, 0).getDate();
+  const perDay = daysPassed ? Math.round(expense / daysPassed) : 0;
+
+  stats.innerHTML = [
+    {num: fmtMoney(income), label: 'Доходы'},
+    {num: fmtMoney(expense), label: 'Расходы'},
+    {num: fmtMoney(balance), label: 'Остаток'},
+    {num: fmtMoney(perDay), label: 'В день'}
+  ].map(s => '<div class="stat"><div class="stat-num" style="font-size:16px">' + s.num +
+             '</div><div class="stat-label">' + s.label + '</div></div>').join('');
+
+  charts.innerHTML = expense || income ? (catChartHtml(month) + monthsChartHtml()) : '';
+
+  if(!month.length){
+    list.innerHTML = emptyBlock('💰', 'Операций за месяц нет',
+      'Записывайте траты сразу — на память они не восстанавливаются. Две кнопки выше добавляют операцию в пару касаний.',
+      '', '');
+    return;
+  }
+
+  // Группировка по дням: так список читается как выписка.
+  const byDay = {};
+  month.forEach(t=>{ (byDay[t.ts] = byDay[t.ts] || []).push(t); });
+
+  list.innerHTML = Object.keys(byDay).sort().reverse().map(day=>{
+    const d = new Date(day + 'T00:00:00');
+    const head = '<div class="money-day">' + d.getDate() + ' ' + MON_S[d.getMonth()] + '</div>';
+    const rows = byDay[day].map(t=>{
+      const c = catById(t.kind, t.category);
+      return '<button class="money-line" onclick="openTxModal(\'' + t.kind + '\',\'' + esc(t.id) + '\')">' +
+        '<span class="m-cat">' + esc(c.icon) + '</span>' +
+        '<span class="m-mid">' +
+          '<span class="m-title">' + esc(c.name) + '</span>' +
+          (t.note ? '<span class="m-note">' + esc(t.note) + '</span>' : '') +
+        '</span>' +
+        '<span class="m-sum ' + t.kind + '">' +
+          (t.kind === 'income' ? '+' : '−') + fmtMoney(t.amount) + '</span>' +
+      '</button>';
+    }).join('');
+    return head + rows;
+  }).join('');
+}
+
+// Расходы по категориям за месяц — горизонтальные полосы.
+function catChartHtml(month){
+  const spent = {};
+  month.filter(t => t.kind === 'expense').forEach(t=>{
+    spent[t.category] = (spent[t.category] || 0) + t.amount;
+  });
+  const rows = Object.keys(spent).sort((a, b) => spent[b] - spent[a]);
+  if(!rows.length) return '';
+  const max = spent[rows[0]];
+
+  return '<div class="chart-card"><h3>Расходы по категориям</h3>' +
+    rows.map(id=>{
+      const c = catById('expense', id);
+      return '<div class="cat-bar">' +
+        '<span class="cb-ico">' + esc(c.icon) + '</span>' +
+        '<span class="cb-name">' + esc(c.name) + '</span>' +
+        '<span class="cb-track"><span class="cb-fill" style="width:' +
+          Math.round(spent[id] / max * 100) + '%"></span></span>' +
+        '<span class="cb-sum">' + fmtMoney(spent[id]) + '</span>' +
+      '</div>';
+    }).join('') + '</div>';
+}
+
+// Доходы и расходы по месяцам — двенадцать пар столбиков.
+function monthsChartHtml(){
+  const cols = [];
+  let max = 1;
+  for(let i = 11; i >= 0; i--){
+    const {y, m} = monthOf(moneyOffset - i);
+    const month = txs.filter(t => txInMonth(t, y, m));
+    const inc = month.filter(t => t.kind === 'income').reduce((s, t) => s + t.amount, 0);
+    const exp = month.filter(t => t.kind === 'expense').reduce((s, t) => s + t.amount, 0);
+    max = Math.max(max, inc, exp);
+    cols.push({m, inc, exp});
+  }
+
+  return '<div class="chart-card"><h3>Год по месяцам</h3><div class="months-chart">' +
+    cols.map(c =>
+      '<div class="mc-col">' +
+        '<div class="mc-bars">' +
+          '<div class="mc-bar mc-in" style="height:' + Math.round(c.inc / max * 100) + '%"' +
+            ' title="Доход ' + fmtMoney(c.inc) + '"></div>' +
+          '<div class="mc-bar mc-out" style="height:' + Math.round(c.exp / max * 100) + '%"' +
+            ' title="Расход ' + fmtMoney(c.exp) + '"></div>' +
+        '</div>' +
+        '<div class="mc-lbl">' + MON_S[c.m].slice(0, 3) + '</div>' +
+      '</div>').join('') +
+    '</div><div class="chart-legend">' +
+      '<span><i style="background:var(--accent)"></i>доходы</span>' +
+      '<span><i style="background:var(--text3)"></i>расходы</span>' +
+    '</div></div>';
+}
+
+// ── Модалка операции ──────────────────────────────────────────────────────
+let txDraft = null;
+
+function openTxModal(kind, id){
+  if(moneyTableMissing){ toast('Сначала создайте таблицу transactions по инструкции из README', true); return; }
+  lastFocused = document.activeElement;
+
+  const existing = id ? txs.find(t => t.id === id) : null;
+  txDraft = existing
+    ? {id: existing.id, kind: existing.kind, category: existing.category}
+    : {id: null, kind: kind, category: MONEY_CATS[kind][0].id};
+
+  document.getElementById('tx-modal-title').textContent =
+    (txDraft.kind === 'income' ? 'Доход' : 'Расход') + (existing ? '' : ' — новая операция');
+  document.getElementById('tx-amount').value = existing ? (existing.amount / 100).toString().replace('.', ',') : '';
+  document.getElementById('tx-note').value = existing ? (existing.note || '') : '';
+  document.getElementById('tx-date').value = existing ? existing.ts : isoDate(new Date(ty, tm, td));
+  document.getElementById('tx-delete-btn').style.display = existing ? '' : 'none';
+  renderTxCategories();
+
+  const m = document.getElementById('tx-modal');
+  m.classList.add('open');
+  m.setAttribute('aria-modal','true');
+  m.setAttribute('role','dialog');
+  document.getElementById('tx-amount').focus();
+}
+
+function renderTxCategories(){
+  document.getElementById('tx-categories').innerHTML = MONEY_CATS[txDraft.kind].map(c=>
+    '<button class="cat-chip" aria-pressed="' + (c.id === txDraft.category ? 'true' : 'false') + '"' +
+    ' onclick="pickTxCat(\'' + c.id + '\')">' + esc(c.icon) + ' ' + esc(c.name) + '</button>').join('');
+}
+
+function pickTxCat(id){
+  txDraft.category = id;
+  renderTxCategories();
+}
+
+function closeTxModal(){
+  document.getElementById('tx-modal').classList.remove('open');
+  txDraft = null;
+  if(lastFocused && lastFocused.focus) lastFocused.focus();
+}
+
+async function saveTxModal(){
+  const amount = parseAmount(document.getElementById('tx-amount').value);
+  if(!amount){ toast('Введите сумму больше нуля', true); return; }
+
+  const ts = document.getElementById('tx-date').value || isoDate(new Date(ty, tm, td));
+  const note = document.getElementById('tx-note').value.trim();
+  const row = {
+    id: txDraft.id || newId('tx'),
+    ts: ts,
+    amount: amount,
+    kind: txDraft.kind,
+    category: txDraft.category,
+    note: note
+  };
+
+  const i = txs.findIndex(t => t.id === row.id);
+  if(i === -1) txs.unshift(row); else txs[i] = row;
+  txs.sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
+
+  closeTxModal();
+  renderMoney();
+  await pushTx(row);
+}
+
+async function pushTx(row){
+  if(isDemoMode || !currentUser) return;
+  try{
+    const res = await sbFetchWithTimeout(()=>
+      sb.from('transactions').upsert(
+        Object.assign({user_id: currentUser.id}, row),
+        {onConflict:'id,user_id'}
+      )
+    );
+    if(res.error) throw new Error(res.error.message);
+    setSyncStatus('операция сохранена ✓', true);
+    setTimeout(()=>setSyncStatus('', false), 1500);
+  }catch(e){
+    // Операция осталась на экране, но в базу не ушла — молчать об этом нельзя.
+    toast('Операция не сохранена на сервере: ' + e.message, true);
+    setSyncStatus('операция не отправлена', false);
+  }
+}
+
+async function deleteTxFromModal(){
+  if(!txDraft || !txDraft.id) return;
+  const id = txDraft.id;
+  const i = txs.findIndex(t => t.id === id);
+  if(i === -1){ closeTxModal(); return; }
+  const removed = txs.splice(i, 1)[0];
+
+  closeTxModal();
+  renderMoney();
+
+  if(!isDemoMode && currentUser){
+    try{
+      const res = await sbFetchWithTimeout(()=>
+        sb.from('transactions').delete().eq('user_id', currentUser.id).eq('id', id)
+      );
+      if(res.error) throw new Error(res.error.message);
+    }catch(e){
+      txs.splice(i, 0, removed);
+      renderMoney();
+      toast('Не удалось удалить операцию: ' + e.message, true);
+      return;
+    }
+  }
+  toast('Операция удалена', false, async ()=>{
+    txs.splice(i, 0, removed);
+    renderMoney();
+    await pushTx(removed);
+  });
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────
@@ -2072,7 +3223,7 @@ function importData(e){
         localStorage.removeItem('customHabits');
       }
       showScreen('app');
-      render();
+      initTabs();
       if(isNewUser){ await loadData(); subscribeRealtime(); }
     }
     if(event === 'TOKEN_REFRESHED' && session){
@@ -2093,7 +3244,7 @@ function importData(e){
     data = {};
     HABITS = cloneDefaults();
     showScreen('app');
-    render();
+    initTabs();
     await loadData();
     subscribeRealtime();
   } else {

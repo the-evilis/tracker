@@ -318,3 +318,174 @@ body.magic-cursor *, body.magic-cursor{cursor:url("data:image/svg+xml;utf8,<svg 
   font-size:12px;cursor:pointer;pointer-events:auto}
 .toast.act{pointer-events:auto}
 
+/* ═══════════════ РАЗДЕЛЫ И НИЖНЕЕ МЕНЮ ═══════════════ */
+
+/* Скрытая панель именно hidden, а не display:none в стиле: так её
+   содержимое недоступно и с клавиатуры, и программе чтения с экрана. */
+.tab-panel[hidden]{display:none}
+
+/* Нижнее меню. Пять пунктов — предел, при котором подпись остаётся
+   читаемой на экране 360 px. safe-area — чтобы на iPhone панель не
+   уезжала под системную полосу. */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:800;display:flex;
+  background:color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border-top:1px solid var(--border);
+  padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+.tab-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
+  padding:6px 2px;border:none;background:none;cursor:pointer;color:var(--text3);
+  font-family:var(--sans);font-size:10px;letter-spacing:.02em;transition:color .2s}
+.tab-btn .tab-ico{font-size:19px;line-height:1;filter:grayscale(1) opacity(.75);transition:filter .2s}
+.tab-btn.active{color:var(--accent);font-weight:500}
+.tab-btn.active .tab-ico{filter:none}
+.tab-btn:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:10px}
+
+/* Место под меню, чтобы последний элемент списка не прятался за ним. */
+.app{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+.demo-banner{bottom:calc(64px + env(safe-area-inset-bottom))}
+.signature{text-align:center;margin-top:32px;padding-bottom:8px;font-size:12px;
+  color:var(--text3);letter-spacing:0.04em}
+
+.section-actions{display:flex;gap:8px;margin-top:20px}
+.section-actions .btn{flex:1}
+.back-btn{border:none;background:none;color:var(--text2);font-family:var(--sans);
+  font-size:13px;cursor:pointer;padding:4px 0;margin-bottom:12px}
+.back-btn:hover{color:var(--text)}
+
+/* Пустое состояние раздела: без него новый раздел выглядит поломкой. */
+.empty-section{text-align:center;padding:40px 20px;color:var(--text2)}
+.empty-section .empty-emoji{font-size:40px;margin-bottom:12px}
+.empty-section h3{font-family:var(--serif);font-size:20px;font-weight:400;
+  font-style:italic;margin-bottom:6px;color:var(--text)}
+.empty-section p{font-size:13px;line-height:1.6;max-width:320px;margin:0 auto}
+
+/* ═══════════════ FOCUS: цели ═══════════════ */
+.goals-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:16px}
+.goal-card{position:relative;border:none;border-radius:var(--radius);padding:16px 14px;
+  min-height:132px;display:flex;flex-direction:column;justify-content:space-between;
+  cursor:pointer;text-align:left;font-family:var(--sans);color:#fff;
+  box-shadow:var(--shadow);transition:transform .2s,box-shadow .2s;overflow:hidden}
+.goal-card:hover{transform:translateY(-2px);box-shadow:0 6px 24px rgba(0,0,0,.16)}
+.goal-card .goal-ico{font-size:22px;line-height:1}
+.goal-card .goal-name{font-size:16px;font-weight:500;line-height:1.25;margin-top:auto}
+.goal-card .goal-sub{font-size:11px;opacity:.85;margin-top:4px}
+.goal-card .goal-bar{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(255,255,255,.28)}
+.goal-card .goal-bar i{display:block;height:100%;background:rgba(255,255,255,.9)}
+
+/* Карточка списка из ста пунктов — шире остальных, это отдельная сущность. */
+.hundred-card{width:100%;border:none;border-radius:var(--radius);padding:18px;
+  background:linear-gradient(135deg,#7F77DD,#4338CA);color:#fff;cursor:pointer;
+  text-align:left;font-family:var(--sans);box-shadow:var(--shadow);display:block}
+.hundred-card h3{font-family:var(--serif);font-size:22px;font-weight:400;font-style:italic}
+.hundred-card .hundred-sub{font-size:12px;opacity:.85;margin-top:2px}
+/* Сто точек — это индикатор, а не сетка для нажатий: высота фиксированная,
+   иначе на телефоне карточка занимала бы весь экран. */
+.hundred-dots{display:grid;grid-template-columns:repeat(20,1fr);gap:3px;margin-top:14px}
+.hundred-dots span{height:8px;border-radius:2px;background:rgba(255,255,255,.25)}
+.hundred-dots span.done{background:#fff}
+
+/* Задачи внутри цели и пункты списка ста */
+.task-row{display:flex;align-items:center;gap:12px;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;
+  margin-bottom:8px;box-shadow:var(--shadow)}
+.task-check{width:22px;height:22px;border-radius:50%;border:2px solid var(--border);
+  background:none;cursor:pointer;flex-shrink:0;display:flex;align-items:center;
+  justify-content:center;font-size:12px;color:#fff;transition:background .2s,border-color .2s}
+.task-check[aria-checked="true"]{background:var(--accent);border-color:var(--accent)}
+.task-check:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.task-text{flex:1;font-size:14px;line-height:1.4;color:var(--text);word-break:break-word}
+.task-row.done .task-text{color:var(--text3);text-decoration:line-through}
+.task-del{border:none;background:none;color:var(--text3);cursor:pointer;font-size:15px;
+  padding:2px 4px;line-height:1}
+.task-del:hover{color:#dc2626}
+.goal-head{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.goal-head .goal-ico{font-size:30px}
+.goal-head h2{font-family:var(--serif);font-size:26px;font-weight:400;font-style:italic}
+.goal-head .goal-sub{font-size:12px;color:var(--text3);margin-top:2px}
+
+/* ═══════════════ MONEY ═══════════════ */
+.money-line{display:flex;align-items:center;gap:12px;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 14px;
+  margin-bottom:8px;box-shadow:var(--shadow);cursor:pointer;width:100%;
+  font-family:var(--sans);text-align:left}
+.money-line .m-cat{font-size:19px;width:26px;text-align:center;flex-shrink:0}
+.money-line .m-mid{flex:1;min-width:0}
+.money-line .m-title{font-size:14px;color:var(--text);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.money-line .m-note{font-size:11px;color:var(--text3);margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.money-line .m-sum{font-size:14px;font-weight:500;white-space:nowrap}
+.m-sum.income{color:var(--accent)}
+.m-sum.expense{color:var(--text)}
+.money-day{font-size:11px;color:var(--text3);text-transform:uppercase;
+  letter-spacing:.04em;margin:16px 0 8px}
+.btn-income{background:var(--accent);color:#fff;border:none}
+.btn-expense{background:var(--surface);color:var(--text);border:1px solid var(--border)}
+.chart-card{background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:16px 14px;margin-top:16px;box-shadow:var(--shadow)}
+.chart-card h3{font-size:12px;color:var(--text3);text-transform:uppercase;
+  letter-spacing:.04em;font-weight:500;margin-bottom:12px}
+.cat-bar{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.cat-bar .cb-ico{font-size:16px;width:22px;text-align:center;flex-shrink:0}
+.cat-bar .cb-name{font-size:12px;color:var(--text2);width:88px;flex-shrink:0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cat-bar .cb-track{flex:1;height:8px;border-radius:4px;background:var(--surface2);overflow:hidden}
+/* display:block обязателен: span по умолчанию строчный, и высота с
+   шириной у него просто игнорировались бы — полоса оставалась пустой. */
+.cat-bar .cb-fill{display:block;height:100%;border-radius:4px;background:var(--accent)}
+.cat-bar .cb-sum{font-size:12px;color:var(--text);width:78px;text-align:right;flex-shrink:0}
+.months-chart{display:flex;align-items:flex-end;gap:8px;height:120px}
+.months-chart .mc-col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;
+  align-items:center;gap:3px;height:100%}
+.months-chart .mc-bars{display:flex;gap:2px;align-items:flex-end;height:100%;width:100%;
+  justify-content:center}
+.months-chart .mc-bar{width:9px;border-radius:3px 3px 0 0;min-height:2px}
+.months-chart .mc-in{background:var(--accent)}
+.months-chart .mc-out{background:var(--text3)}
+.months-chart .mc-lbl{font-size:10px;color:var(--text3)}
+.chart-legend{display:flex;gap:14px;margin-top:12px;font-size:11px;color:var(--text3)}
+.chart-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
+
+/* ═══════════════ CREDO и QUOTES ═══════════════ */
+.credo-today{background:var(--surface);border:1px solid var(--border);
+  border-left:3px solid var(--accent);border-radius:var(--radius);padding:18px;
+  box-shadow:var(--shadow);margin-bottom:20px}
+.credo-today .ct-label{font-size:11px;color:var(--text3);text-transform:uppercase;
+  letter-spacing:.04em;margin-bottom:8px}
+.credo-today .ct-text{font-family:var(--serif);font-size:20px;line-height:1.4;
+  font-style:italic;color:var(--text)}
+.credo-row{display:flex;align-items:flex-start;gap:12px;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--radius-sm);padding:13px 14px;
+  margin-bottom:8px;box-shadow:var(--shadow)}
+.credo-row .cr-text{flex:1;font-size:14px;line-height:1.5;color:var(--text);
+  cursor:pointer;word-break:break-word}
+.credo-row .cr-streak{font-size:11px;color:var(--text3);white-space:nowrap;margin-top:2px}
+.quote-item{background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-sm);padding:14px;margin-bottom:8px;box-shadow:var(--shadow)}
+.quote-item .qi-text{font-family:var(--serif);font-size:16px;line-height:1.45;
+  font-style:italic;color:var(--text);cursor:pointer}
+.quote-item .qi-bottom{display:flex;align-items:center;justify-content:space-between;
+  margin-top:8px;gap:10px}
+.quote-item .qi-author{font-size:11px;color:var(--text3)}
+.fav-btn{border:none;background:none;cursor:pointer;font-size:15px;
+  filter:grayscale(1) opacity(.5);transition:filter .2s;padding:2px}
+.fav-btn.on{filter:none}
+
+/* ═══════════════ ПОЛЯ В МОДАЛКАХ ═══════════════ */
+.field-row{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+.field-row .add-input{flex:1;margin:0}
+.text-area{width:100%;resize:vertical;line-height:1.5;font-family:var(--sans);
+  padding:12px 14px;margin-bottom:12px;border-radius:12px;border:1.5px solid var(--border);
+  background:var(--surface2);color:var(--text);font-size:14px;outline:none}
+.text-area:focus{border-color:var(--accent)}
+.amount-input{font-size:28px;font-family:var(--serif);text-align:center;padding:14px}
+.color-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.color-dot{width:30px;height:30px;border-radius:50%;border:2px solid transparent;cursor:pointer}
+.color-dot[aria-pressed="true"]{border-color:var(--text)}
+.cat-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.cat-chip{border:1px solid var(--border);background:var(--surface2);color:var(--text2);
+  border-radius:100px;padding:7px 12px;font-family:var(--sans);font-size:12px;cursor:pointer;
+  display:flex;align-items:center;gap:5px;transition:all .2s}
+.cat-chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-danger{background:none;border:1px solid var(--border);color:#dc2626;margin-right:auto}
+

@@ -13,7 +13,7 @@
 | Путь | Что это |
 |---|---|
 | `/opt/tracker/repo` | Клон GitHub-репозитория (обновляется `git fetch`) |
-| `/opt/tracker/public` | Вебрут nginx: `index.html`, `manifest.json`, `sw.js`, иконки |
+| `/opt/tracker/public` | Вебрут nginx: `index.html`, `app.js`, `styles.css`, `manifest.json`, `sw.js`, иконки |
 | `/opt/tracker/deploy.sh` | Деплой: тянет свежую версию из GitHub |
 | `/opt/tracker/keepalive.sh` | Не даёт проекту Supabase уснуть (cron, 04:17) |
 | `/opt/tracker/backup.sh` | Ночной бэкап базы (cron, 03:40) |
@@ -39,9 +39,12 @@ ssh root@152.42.129.14
 /opt/tracker/deploy.sh
 ```
 
-Скрипт подтянет из ветки `index.html`, `manifest.json`, `sw.js` и иконки,
-разложит в вебрут и перезагрузит nginx. Результат — в
-`/var/log/tracker-deploy.log`.
+Скрипт подтянет из ветки `index.html`, `app.js`, `styles.css`,
+`manifest.json`, `sw.js` и иконки, разложит в вебрут и перезагрузит nginx.
+Результат — в `/var/log/tracker-deploy.log`.
+
+Первые три файла обязательны: без любого из них страница не работает, и
+деплой прервётся с ошибкой, не тронув вебрут.
 
 > **Важно.** `deploy.sh` делает `git reset --hard`, то есть перетирает всё,
 > чего нет в GitHub. Правки, залитые в `public/` напрямую, он сотрёт —
@@ -67,13 +70,17 @@ npx playwright install chromium   # один раз: браузер для smoke
 npm run test:all            # синтаксис + логика + браузер
 ```
 
+Логика приложения живёт в `app.js`, разметка в `index.html`, стили в
+`styles.css`. Сборки нет: тесты берут код прямо из `app.js`, а деплой
+копирует файлы как есть.
+
 Что во что входит:
 
 | Команда | Что проверяет |
 |---|---|
 | `npm run test:syntax` | Компилирует `<script>` из `index.html` — ловит опечатки до открытия страницы |
 | `npm test` | Логика без DOM: миграция ключей, экранирование, графики, серии, проценты, архив, логика и сетевой слой бота (165 проверок) |
-| `npm run test:e2e` | Smoke в настоящем Chromium: демо-режим, отметки, виды, модалка, тема, PWA |
+| `npm run test:e2e` | Smoke в настоящем Chromium: демо-режим, отметки, виды, модалка, тема, PWA, все пять разделов (23 теста в двух профилях) |
 
 Smoke-тесты поднимают `tests/serve.js` (та же статика, что уходит в вебрут),
 подменяют SDK Supabase заглушкой и **блокируют любые запросы на `*.supabase.co`**
@@ -310,6 +317,64 @@ select indexname, indexdef from pg_indexes
 where schemaname='public' and tablename='habits';
 -- нужен уникальный индекс по паре (id, user_id)
 ```
+
+## Разделы приложения
+
+Внизу пять вкладок, выбор запоминается между запусками:
+
+| Вкладка | Что внутри | Где хранится |
+|---|---|---|
+| **Focus** | Цели с задачами и список «100» отдельной карточкой | `user_settings`, ключи `goals` и `list100` |
+| **Money** | Доходы, расходы, графики по категориям и месяцам | таблица `transactions` |
+| **Tracker** | Привычки по дням — прежний основной экран | `habits` + `user_settings` |
+| **Credo** | Принципы, принцип дня, отметка «следовал сегодня» | `user_settings`, ключ `credo`; отметки — в `habits` |
+| **Quotes** | Цитата дня и своя подборка | `user_settings`, ключ `quotes` |
+
+Отметки принципов кладутся в ту же таблицу `habits` и тем же ключом
+`год/месяц/день/<id>`, что и привычки: очередь офлайн-отправки, серии и
+синхронизация заработали даром. В список привычек принципы не попадают,
+поэтому статистику трекера они не искажают.
+
+### Таблица для раздела «Деньги»
+
+Раздел появился позже остальных, поэтому таблицу нужно создать один раз
+руками — в дашборде Supabase, **SQL Editor**. Пока её нет, вкладка Money
+показывает инструкцию вместо операций, остальное приложение работает.
+
+```sql
+create table if not exists transactions (
+  id          text        not null,
+  user_id     uuid        not null references auth.users(id) on delete cascade,
+  ts          date        not null,
+  -- Сумма целыми копейками: во float дробные рубли дают ошибку округления,
+  -- и итог месяца перестаёт сходиться с суммой строк.
+  amount      bigint      not null check (amount > 0),
+  kind        text        not null check (kind in ('income','expense')),
+  category    text,
+  note        text,
+  updated_at  timestamptz not null default now(),
+  primary key (id, user_id)
+);
+
+alter table transactions enable row level security;
+
+create policy "own rows" on transactions
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create index if not exists transactions_user_ts on transactions (user_id, ts desc);
+```
+
+Проверить, что политика работает (должен вернуться пустой массив):
+
+```bash
+set -a; . /opt/tracker/.env; set +a
+curl -s -H "apikey: $SUPABASE_ANON_KEY" -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+     "$SUPABASE_URL/rest/v1/transactions?select=*&limit=5"
+```
+
+Категории операций заданы в коде (`MONEY_CATS` в `app.js`), валюта одна —
+рубль. Счета и бюджеты по категориям намеренно не делались: без них ввод
+операции остаётся в два касания.
 
 ## Формат данных
 
