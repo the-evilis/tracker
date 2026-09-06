@@ -24,6 +24,25 @@ test('нижнее меню показывает пять разделов', asy
   expect(pageErrors).toEqual([]);
 });
 
+test('на широком экране меню не растягивается во всю ширину', async ({page}) => {
+  await page.setViewportSize({width: 1440, height: 900});
+  await openDemo(page);
+
+  const bar = await page.locator('#tabbar').boundingBox();
+  // Раньше панель шла от края до края, и пять иконок расползались
+  // по краям монитора вместо панели.
+  expect(bar.width).toBeLessThan(600);
+  // И она по центру: отступы слева и справа примерно равны.
+  const gapLeft = bar.x;
+  const gapRight = 1440 - (bar.x + bar.width);
+  expect(Math.abs(gapLeft - gapRight)).toBeLessThan(20);
+
+  // На телефоне панель, наоборот, занимает всю ширину.
+  await page.setViewportSize({width: 390, height: 844});
+  const narrow = await page.locator('#tabbar').boundingBox();
+  expect(narrow.width).toBeGreaterThan(380);
+});
+
 test('вкладки переключаются и выбор запоминается', async ({page, pageErrors}) => {
   await openDemo(page);
 

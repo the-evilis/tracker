@@ -343,6 +343,27 @@ body.magic-cursor *, body.magic-cursor{cursor:url("data:image/svg+xml;utf8,<svg 
 /* Место под меню, чтобы последний элемент списка не прятался за ним. */
 .app{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
 .demo-banner{bottom:calc(64px + env(safe-area-inset-bottom))}
+
+/* На большом экране панель во всю ширину растаскивает пять иконок по краям
+   монитора — вместо панели получается редкая цепочка кнопок. Поэтому на
+   десктопе меню превращается в плавающий островок по центру. */
+@media (min-width:760px){
+  .tabbar{left:50%;right:auto;transform:translateX(-50%);width:min(440px,92vw);
+    bottom:18px;padding:8px 10px;border:1px solid var(--border);
+    border-radius:100px;box-shadow:0 8px 30px rgba(0,0,0,.14)}
+  .tab-btn{border-radius:100px}
+  /* Баннер демо тоже становится островком: полоса во всю ширину монитора
+     кричит громче самого приложения. */
+  .demo-banner{bottom:96px;left:50%;right:auto;transform:translateX(-50%);
+    width:min(680px,92vw);border-radius:14px;border:1px solid var(--border)}
+  .app{padding-bottom:120px}
+}
+
+/* Совсем широкие экраны: колонка чуть шире. Правило для сетки целей лежит
+   в самом низу файла — иначе его перебивает более позднее .goals-grid. */
+@media (min-width:1100px){
+  .app{max-width:860px}
+}
 .signature{text-align:center;margin-top:32px;padding-bottom:8px;font-size:12px;
   color:var(--text3);letter-spacing:0.04em}
 
@@ -378,10 +399,12 @@ body.magic-cursor *, body.magic-cursor{cursor:url("data:image/svg+xml;utf8,<svg 
   text-align:left;font-family:var(--sans);box-shadow:var(--shadow);display:block}
 .hundred-card h3{font-family:var(--serif);font-size:22px;font-weight:400;font-style:italic}
 .hundred-card .hundred-sub{font-size:12px;opacity:.85;margin-top:2px}
-/* Сто точек — это индикатор, а не сетка для нажатий: высота фиксированная,
-   иначе на телефоне карточка занимала бы весь экран. */
-.hundred-dots{display:grid;grid-template-columns:repeat(20,1fr);gap:3px;margin-top:14px}
-.hundred-dots span{height:8px;border-radius:2px;background:rgba(255,255,255,.25)}
+/* Сто точек — индикатор, а не сетка для нажатий. Двадцать в ряд и жёсткий
+   потолок ширины: без него на телефоне карточка занимала весь экран, а на
+   мониторе точки растягивались в кирпичи. */
+.hundred-dots{display:grid;grid-template-columns:repeat(20,1fr);gap:3px;
+  margin-top:14px;max-width:380px}
+.hundred-dots span{aspect-ratio:1;border-radius:2px;background:rgba(255,255,255,.25)}
 .hundred-dots span.done{background:#fff}
 
 /* Задачи внутри цели и пункты списка ста */
@@ -488,4 +511,10 @@ body.magic-cursor *, body.magic-cursor{cursor:url("data:image/svg+xml;utf8,<svg 
   display:flex;align-items:center;gap:5px;transition:all .2s}
 .cat-chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
 .btn-danger{background:none;border:1px solid var(--border);color:#dc2626;margin-right:auto}
+
+/* Широкий экран: цели в три колонки. Правило стоит последним намеренно —
+   выше по файлу его перебивало бы обычное .goals-grid с двумя колонками. */
+@media (min-width:1100px){
+  .goals-grid{grid-template-columns:repeat(3,1fr)}
+}
 
