@@ -1,44 +1,58 @@
-// Проверка синтаксиса всех встроенных <script> в HTML.
+// Проверка синтаксиса кода приложения.
 //
-// Приложение — один файл без сборки, поэтому опечатка в скрипте не всплывает
-// нигде до открытия страницы в браузере. Этот скрипт компилирует код, но не
-// выполняет его: ошибка разбора будет видна сразу и с номером строки.
+// Сборки в проекте нет, поэтому опечатка в скрипте не всплывает нигде до
+// открытия страницы в браузере. Этот скрипт компилирует код, но не
+// выполняет его: ошибка разбора видна сразу и с номером строки.
 //
-// Запуск: node tests/check-syntax.js index.html
+// Запуск:
+//   node tests/check-syntax.js app.js       — отдельный файл скрипта
+//   node tests/check-syntax.js index.html   — все встроенные <script> страницы
+'use strict';
+
 const fs = require('fs');
 const vm = require('vm');
 
-const file = process.argv[2];
-if (!file) {
-  console.error('Использование: node tests/check-syntax.js <файл.html>');
+const file = process.argv[2] || 'app.js';
+if (!fs.existsSync(file)) {
+  console.error('Файл не найден: ' + file);
   process.exit(2);
 }
 
-const html = fs.readFileSync(file, 'utf8');
-const re = /<script([^>]*)>([\s\S]*?)<\/script>/gi;
+let checked = 0, failed = 0;
 
-let m, checked = 0, failed = 0;
-while ((m = re.exec(html)) !== null) {
-  const attrs = m[1] || '';
-  const code = m[2];
-  if (/\ssrc\s*=/i.test(attrs)) continue;      // внешний файл — проверять нечего
-  if (!code.trim()) continue;
-
-  // Номер строки начала блока — чтобы позиция ошибки совпадала с файлом.
-  const line = html.slice(0, m.index).split('\n').length;
+function compile(code, label, lines) {
   checked++;
   try {
-    new vm.Script(code, {filename: file + ' (<script> со строки ' + line + ')'});
-    console.log('  ok   <script> со строки ' + line + ', ' + code.split('\n').length + ' строк');
+    new vm.Script(code, {filename: label});
+    console.log('  ok   ' + label + ', ' + lines + ' строк');
   } catch (e) {
     failed++;
-    console.log('  FAIL <script> со строки ' + line + ': ' + e.message);
+    console.log('  FAIL ' + label + ': ' + e.message);
   }
 }
 
-if (!checked) {
-  console.error('В файле не нашлось ни одного встроенного <script>');
-  process.exit(1);
+if (/\.js$/i.test(file)) {
+  const code = fs.readFileSync(file, 'utf8');
+  compile(code, file, code.split('\n').length);
+} else {
+  const html = fs.readFileSync(file, 'utf8');
+  const re = /<script([^>]*)>([\s\S]*?)<\/script>/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    const attrs = m[1] || '';
+    const code = m[2];
+    if (/\ssrc\s*=/i.test(attrs)) continue;      // внешний файл — проверять нечего
+    if (!code.trim()) continue;
+
+    // Номер строки начала блока — чтобы позиция ошибки совпадала с файлом.
+    const line = html.slice(0, m.index).split('\n').length;
+    compile(code, file + ' (<script> со строки ' + line + ')', code.split('\n').length);
+  }
+  if (!checked) {
+    // После разделения файлов это нормально: весь код уехал в app.js.
+    console.log('  --   встроенных <script> в ' + file + ' нет, проверять нечего');
+    process.exit(0);
+  }
 }
 
 console.log('\nПроверено блоков: ' + checked + (failed ? ', с ошибками: ' + failed : ', ошибок нет'));

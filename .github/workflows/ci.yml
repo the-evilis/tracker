@@ -25,8 +25,8 @@ jobs:
       - name: Установка зависимостей
         run: npm ci
 
-      - name: Синтаксис скрипта из index.html
-        run: node tests/check-syntax.js index.html
+      - name: Синтаксис app.js
+        run: node tests/check-syntax.js app.js
 
       - name: Тесты логики
         run: npm test

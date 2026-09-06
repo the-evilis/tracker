@@ -1,8 +1,6 @@
 // Проверка чистой логики, вынутой из приложения: миграция ключей,
 // присвоение id и склонение дней. DOM здесь не нужен.
-const fs = require('fs');
-const src = fs.readFileSync(process.argv[2], 'utf8');
-const js = src.match(/<script>([\s\S]*)<\/script>/)[1];
+const js = require('./read-source')(process.argv[2] || 'app.js');
 
 // Вытаскиваем нужные функции по имени, не запуская остальной файл.
 function grab(name){

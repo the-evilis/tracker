@@ -10,8 +10,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const src = fs.readFileSync(process.argv[2] || 'index.html', 'utf8');
-const js = src.match(/<script>([\s\S]*)<\/script>/)[1];
+const js = require('./read-source')(process.argv[2] || 'app.js');
 
 function grab(name){
   const re = new RegExp('function ' + name + '\\s*\\([^)]*\\)\\s*\\{');

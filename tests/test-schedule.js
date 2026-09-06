@@ -1,7 +1,5 @@
 // Проверка логики графиков, серий и процентов, вынутой из приложения.
-const fs = require('fs');
-const src = fs.readFileSync(process.argv[2], 'utf8');
-const js = src.match(/<script>([\s\S]*)<\/script>/)[1];
+const js = require('./read-source')(process.argv[2] || 'app.js');
 
 function grab(name){
   const re = new RegExp('function ' + name + '\\s*\\([^)]*\\)\\s*\\{');

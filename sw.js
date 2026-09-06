@@ -3,17 +3,24 @@
 // в localStorage, а несинхронизированные отметки — в очереди внутри
 // приложения, поэтому здесь достаточно кэшировать саму оболочку.
 
-const CACHE = 'tracker-v1';
+const CACHE = 'tracker-v2';
 
 // Файлы оболочки. Внешние ресурсы (Supabase, шрифты, CDN) намеренно
 // не кэшируем: они должны ходить в сеть и не мешать обновлению.
 const SHELL = [
   '/',
   '/index.html',
+  '/app.js',
+  '/styles.css',
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png'
 ];
+
+// Код и стили обновляются вместе с разметкой, поэтому берутся из сети так
+// же, как HTML. Иначе после деплоя человек получил бы новую страницу со
+// старым скриптом из кэша — и приложение сломалось бы до второй загрузки.
+const NETWORK_FIRST = ['/app.js', '/styles.css'];
 
 self.addEventListener('install', event=>{
   event.waitUntil(
@@ -52,6 +59,22 @@ self.addEventListener('fetch', event=>{
           return res;
         })
         .catch(()=> caches.match('/index.html').then(r => r || caches.match('/')))
+    );
+    return;
+  }
+
+  // Скрипт и стили — тоже «сначала сеть», с откатом на кэш без сети.
+  if(NETWORK_FIRST.indexOf(url.pathname) !== -1){
+    event.respondWith(
+      fetch(req)
+        .then(res=>{
+          if(res && res.status === 200){
+            const copy = res.clone();
+            caches.open(CACHE).then(c => c.put(req, copy)).catch(()=>{});
+          }
+          return res;
+        })
+        .catch(()=> caches.match(req))
     );
     return;
   }
