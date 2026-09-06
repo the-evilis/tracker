@@ -29,6 +29,15 @@ fi
 git reset --hard --quiet "origin/$(git rev-parse --abbrev-ref HEAD)"
 NEW_REV="$(git rev-parse --short HEAD)"
 
+# Скрипт живёт вне репозитория, поэтому обновляет сам себя и перезапускается.
+# Без этого новая версия деплоя не применяется: так однажды в вебрут не
+# попали app.js и styles.css, и сайт остался со старым скриптом внутри.
+if [ -f "$REPO_DIR/deploy.sh" ] && ! cmp -s "$REPO_DIR/deploy.sh" "$0"; then
+    install -m 0755 "$REPO_DIR/deploy.sh" "$0"
+    log "deploy.sh обновлён до $NEW_REV, перезапускаюсь"
+    exec "$0" "$@"
+fi
+
 for f in $REQUIRED; do
     if [ ! -f "$REPO_DIR/$f" ]; then
         log "ОШИБКА: $f в репозитории не найден, деплой отменён"

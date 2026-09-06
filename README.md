@@ -20,7 +20,7 @@
 | `/opt/tracker/.env` | Настройки скриптов, права 600, в git не попадает |
 | `/opt/tracker/.env.example` | Шаблон настроек |
 | `/opt/tracker/backups/` | Архивы бэкапов, хранятся 30 дней |
-| `/etc/nginx/sites-available/tracker.fountaine.online` | Конфиг nginx |
+| `/etc/nginx/sites-available/tracker.fountaine.online` | Конфиг nginx (копия в репозитории: `nginx/tracker.fountaine.online.conf`) |
 | `/var/log/tracker-deploy.log` | Лог деплоев (ротация: 500 строк) |
 | `/var/log/tracker-keepalive.log` | Лог keep-alive (ротация: 500 строк) |
 | `/var/log/tracker-backup.log` | Лог бэкапов (ротация: 500 строк) |
