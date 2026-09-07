@@ -490,8 +490,18 @@ async function flushQueue(){
   }
 }
 
-window.addEventListener('online', flushQueue);
-document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) flushQueue(); });
+window.addEventListener('online', ()=>{
+  flushQueue();
+  // Разделы и операции держат свои очереди неотправленного.
+  if(typeof flushSections === 'function') flushSections();
+  if(typeof flushTxQueue === 'function') flushTxQueue();
+});
+document.addEventListener('visibilitychange', ()=>{
+  if(document.hidden) return;
+  flushQueue();
+  if(typeof flushSections === 'function') flushSections();
+  if(typeof flushTxQueue === 'function') flushTxQueue();
+});
 
 // Fetch with timeout to avoid infinite hang
 async function sbFetchWithTimeout(fn, ms=8000){
@@ -1874,7 +1884,31 @@ function renderQuote(){
   te.style.opacity=ae.style.opacity='0';
   setTimeout(()=>{ te.textContent=q.text; ae.textContent=q.author?'— '+q.author:''; te.style.transition=ae.style.transition='opacity .4s'; te.style.opacity=ae.style.opacity='1'; },200);
 }
-function nextQuote(){ let n; do{n=Math.floor(Math.random()*QUOTES.length);}while(n===quoteIndex&&QUOTES.length>1); quoteIndex=n; renderQuote(); }
+function nextQuote(){ let n; do{n=Math.floor(Math.random()*QUOTES.length);}while(n===quoteIndex&&QUOTES.length>1); quoteIndex=n; renderQuote(); updateSaveQuoteBtn(); }
+
+// Понравившуюся цитату дня можно забрать себе — иначе она уходит с
+// перелистыванием, и вернуть её нельзя ничем, кроме везения.
+function saveCurrentQuote(){
+  const q = QUOTES[quoteIndex];
+  if(hasOwnQuote(q)){ toast('Эта цитата уже в вашей подборке'); return; }
+  sections.quotes.push({id: newId('q'), text: q.text, author: q.author || '', fav: false});
+  saveSection('quotes');
+  renderQuotes();
+  toast('Цитата сохранена в вашу подборку');
+}
+
+function hasOwnQuote(q){
+  return sections.quotes.some(x => x && x.text === q.text);
+}
+
+// Кнопка меняет вид, когда цитата уже сохранена: нажимать второй раз незачем.
+function updateSaveQuoteBtn(){
+  const btn = document.getElementById('save-quote-btn');
+  if(!btn) return;
+  const saved = hasOwnQuote(QUOTES[quoteIndex]);
+  btn.textContent = saved ? '✓ В подборке' : '+ Сохранить себе';
+  btn.disabled = saved;
+}
 
 // ── MAGIC SOUNDS ──────────────────────────────────────────────────────────
 const AC=new(window.AudioContext||window.webkitAudioContext)();
@@ -2160,7 +2194,12 @@ function importData(e){
       const known = new Set(sections[key].map(x => x && x.id));
       list.forEach(item=>{
         if(!item || (!item.text && !item.name)) return;
-        if(!item.id) item.id = newId(key.slice(0, 2));
+        // Идентификатор из файла проверяем: он попадает в разметку, а файл
+        // мог прийти откуда угодно.
+        item.id = safeId(item.id, key.slice(0, 2));
+        if(Array.isArray(item.tasks)){
+          item.tasks.forEach(t=>{ if(t) t.id = safeId(t.id, 't'); });
+        }
         if(known.has(item.id)) return;
         sections[key].push(item);
         known.add(item.id);
@@ -2174,7 +2213,9 @@ function importData(e){
     if(Array.isArray(payload.transactions)){
       const knownTx = new Set(txs.map(t => t.id));
       payload.transactions.forEach(t=>{
-        if(!t || !t.id || !t.ts || !t.amount || knownTx.has(t.id)) return;
+        if(!t || !t.ts || !t.amount) return;
+        t.id = safeId(t.id, 'tx');
+        if(knownTx.has(t.id)) return;
         txs.push(t);
         knownTx.add(t.id);
         txAdded++;
@@ -2228,12 +2269,32 @@ function writeSectionLocal(key){
   try{ localStorage.setItem(sectionKey(key), JSON.stringify(sections[key])); }catch(e){}
 }
 
+// Разделы, изменённые локально и ещё не ушедшие на сервер. Список живёт в
+// localStorage: без него неотправленная правка молча терялась при следующей
+// загрузке — серверная версия накатывалась поверх локальной.
+function dirtyKey(){ return 'sec_dirty_' + ((currentUser && currentUser.id) || 'anon'); }
+
+function readDirty(){
+  try{
+    const v = JSON.parse(localStorage.getItem(dirtyKey()) || '[]');
+    return Array.isArray(v) ? v : [];
+  }catch(e){ return []; }
+}
+
+function markDirty(key, on){
+  const set = new Set(readDirty());
+  if(on) set.add(key); else set.delete(key);
+  try{ localStorage.setItem(dirtyKey(), JSON.stringify(Array.from(set))); }catch(e){}
+  updatePendingBadge();
+}
+
 // Сохранение с задержкой: правка списка задач — это серия быстрых
 // изменений, и каждое незачем отправлять отдельным запросом.
 const sectionTimers = {};
 function saveSection(key){
   writeSectionLocal(key);
   if(!currentUser || isDemoMode) return;
+  markDirty(key, true);
   clearTimeout(sectionTimers[key]);
   sectionTimers[key] = setTimeout(()=>pushSection(key), 1200);
 }
@@ -2250,16 +2311,29 @@ async function pushSection(key){
     );
     // Клиент Supabase не бросает исключение — ошибку возвращает в res.error.
     if(res.error) throw new Error(res.error.message);
+    markDirty(key, false);
     setSyncStatus('синхронизировано ✓', true);
     setTimeout(()=>setSyncStatus('', false), 1500);
   }catch(e){
+    // Пометка остаётся: досылка произойдёт при следующей правке, возврате
+    // сети или следующем запуске.
     setSyncStatus('раздел сохранён локально', false);
+  }
+}
+
+// Досылка всего, что не уехало. Вызывается при возврате сети и на старте.
+async function flushSections(){
+  const pending = readDirty();
+  for(const key of pending){
+    if(SECTION_KEYS.indexOf(key) !== -1) await pushSection(key);
   }
 }
 
 async function loadSections(){
   SECTION_KEYS.forEach(k=>{ sections[k] = readSectionLocal(k); });
   if(!currentUser || isDemoMode) return;
+
+  const dirty = readDirty();
   try{
     const res = await sbFetchWithTimeout(()=>
       sb.from('user_settings').select('key,value').eq('user_id', currentUser.id).in('key', SECTION_KEYS)
@@ -2267,17 +2341,59 @@ async function loadSections(){
     if(res.error) return;                       // остаются локальные данные
     (res.data || []).forEach(row=>{
       if(SECTION_KEYS.indexOf(row.key) === -1 || !row.value) return;
+      // Раздел с неотправленными правками серверной версией не затираем:
+      // локальная новее, её и нужно досылать.
+      if(dirty.indexOf(row.key) !== -1) return;
       try{
         const parsed = JSON.parse(row.value);
         if(Array.isArray(parsed)){ sections[row.key] = parsed; writeSectionLocal(row.key); }
       }catch(e){ /* битую запись игнорируем, локальная версия важнее */ }
     });
   }catch(e){ /* нет сети — работаем с локальными */ }
+
+  await flushSections();
 }
 
 function newId(prefix){
   return prefix + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
 }
+
+// Идентификатор из внешнего источника (файл импорта, чужая выгрузка) может
+// содержать что угодно, а он попадает в разметку и в data-атрибуты. Всё,
+// что не похоже на наш id, заменяем своим.
+function safeId(v, prefix){
+  return (typeof v === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(v)) ? v : newId(prefix || 'x');
+}
+
+// ── ОБРАБОТЧИК ДЕЙСТВИЙ РАЗДЕЛОВ ─────────────────────────────────────────
+// Один делегат вместо inline-onclick у каждой строки. Так идентификатор
+// не попадает внутрь кода на странице: он остаётся значением data-атрибута
+// и не может из него «выпрыгнуть».
+const SECTION_ACTIONS = {
+  'open-goal':    el => openGoal(el.dataset.id),
+  'open-hundred': ()  => openHundred(),
+  'new-goal':     ()  => openGoalModal(),
+  'edit-goal':    el => openGoalModal(el.dataset.id),
+  'del-goal':     el => deleteGoal(el.dataset.id),
+  'add-task':     ()  => addTask(),
+  'toggle-task':  el => toggleTask(el.dataset.id),
+  'edit-task':    el => editTask(el.dataset.id),
+  'del-task':     el => deleteTask(el.dataset.id),
+  'new-credo':    ()  => openCredoModal(),
+  'toggle-credo': el => toggleCredo(el.dataset.id),
+  'edit-credo':   el => editCredo(el.dataset.id),
+  'new-quote':    ()  => openQuoteModal(),
+  'edit-quote':   el => editQuote(el.dataset.id),
+  'fav-quote':    el => toggleFavQuote(el.dataset.id),
+  'open-tx':      el => openTxModal(el.dataset.kind, el.dataset.id)
+};
+
+document.addEventListener('click', e=>{
+  const el = e.target.closest('[data-act]');
+  if(!el) return;
+  const fn = SECTION_ACTIONS[el.dataset.act];
+  if(fn){ e.preventDefault(); fn(el); }
+});
 
 // ── ВКЛАДКИ ───────────────────────────────────────────────────────────────
 // Пять разделов внизу. Экран одной цели — не вкладка, а вложенный экран:
@@ -2329,12 +2445,12 @@ function renderCurrent(){
 }
 
 // ── ОБЩИЕ ЭЛЕМЕНТЫ РАЗДЕЛОВ ───────────────────────────────────────────────
-function emptyBlock(emoji, title, text, btnLabel, onClick){
+function emptyBlock(emoji, title, text, btnLabel, action){
   return '<div class="empty-section">' +
     '<div class="empty-emoji">' + emoji + '</div>' +
     '<h3>' + esc(title) + '</h3>' +
     '<p>' + esc(text) + '</p>' +
-    (btnLabel ? '<button class="btn btn-primary" style="margin-top:16px" onclick="' + onClick + '">' +
+    (btnLabel ? '<button class="btn btn-primary" style="margin-top:16px" data-act="' + esc(action) + '">' +
                 esc(btnLabel) + '</button>' : '') +
     '</div>';
 }
@@ -2360,7 +2476,7 @@ function renderFocus(){
     dots.push('<span class="' + (i < done ? 'done' : '') + '"></span>');
   }
   document.getElementById('hundred-card').innerHTML =
-    '<button class="hundred-card" onclick="openHundred()">' +
+    '<button class="hundred-card" data-act="open-hundred">' +
       '<h3>100</h3>' +
       '<div class="hundred-sub">' + (list.length
         ? done + ' из ' + list.length + ' сделано'
@@ -2372,14 +2488,14 @@ function renderFocus(){
   if(!sections.goals.length){
     grid.innerHTML = emptyBlock('🎯', 'Целей пока нет',
       'Направление — это несколько задач с общим смыслом: спорт, бизнес, язык. Начните с одного.',
-      '+ Новая цель', 'openGoalModal()');
+      '+ Новая цель', 'new-goal');
     return;
   }
 
   grid.innerHTML = sections.goals.map(g=>{
     const p = goalProgress(g);
     return '<button class="goal-card" style="background:' + esc(g.color || '#7F77DD') + '"' +
-      ' onclick="openGoal(\'' + esc(g.id) + '\')">' +
+      ' data-act="open-goal" data-id="' + esc(g.id) + '">' +
       '<div class="goal-ico">' + esc(g.icon || '🎯') + '</div>' +
       '<div>' +
         '<div class="goal-name">' + esc(g.name) + '</div>' +
@@ -2424,9 +2540,9 @@ function renderGoalDetail(){
       '<button type="button" class="task-check" role="checkbox"' +
         ' aria-checked="' + (t.done ? 'true' : 'false') + '"' +
         ' aria-label="' + esc(t.text) + '"' +
-        ' onclick="toggleTask(\'' + esc(t.id) + '\')">' + (t.done ? '✓' : '') + '</button>' +
-      '<span class="task-text" onclick="editTask(\'' + esc(t.id) + '\')">' + esc(t.text) + '</span>' +
-      '<button class="task-del" onclick="deleteTask(\'' + esc(t.id) + '\')"' +
+        ' data-act="toggle-task" data-id="' + esc(t.id) + '">' + (t.done ? '✓' : '') + '</button>' +
+      '<span class="task-text" data-act="edit-task" data-id="' + esc(t.id) + '">' + esc(t.text) + '</span>' +
+      '<button class="task-del" data-act="del-task" data-id="' + esc(t.id) + '"' +
         ' aria-label="Удалить">✕</button>' +
     '</div>').join('');
 
@@ -2438,7 +2554,7 @@ function renderGoalDetail(){
         '<div class="goal-sub">' + esc(sub) + '</div>' +
       '</div>' +
       (hundred ? '' :
-        '<button class="icon-btn" onclick="openGoalModal(\'' + esc(g.id) + '\')"' +
+        '<button class="icon-btn" data-act="edit-goal" data-id="' + esc(g.id) + '"' +
         ' aria-label="Изменить цель">✏️</button>') +
     '</div>' +
     (items.length ? rows : emptyBlock(hundred ? '💯' : '📝',
@@ -2447,10 +2563,10 @@ function renderGoalDetail(){
                 : 'Разбейте цель на шаги, которые можно закрыть за раз.',
         '', '')) +
     '<div class="section-actions">' +
-      '<button class="btn btn-primary" onclick="addTask()">+ ' +
+      '<button class="btn btn-primary" data-act="add-task">+ ' +
         (hundred ? 'Новый пункт' : 'Новая задача') + '</button>' +
       (hundred ? '' :
-        '<button class="btn btn-danger" onclick="deleteGoal(\'' + esc(g.id) + '\')">Удалить цель</button>') +
+        '<button class="btn btn-danger" data-act="del-goal" data-id="' + esc(g.id) + '">Удалить цель</button>') +
     '</div>';
 }
 
@@ -2633,7 +2749,7 @@ function renderCredo(){
   if(!sections.credo.length){
     box.innerHTML = emptyBlock('🧭', 'Принципов пока нет',
       'Правила, по которым вы живёте. Каждый вечер можно отметить, следовали ли вы им сегодня.',
-      '+ Новый принцип', 'openCredoModal()');
+      '+ Новый принцип', 'new-credo');
     return;
   }
 
@@ -2645,9 +2761,9 @@ function renderCredo(){
       '<button type="button" class="task-check" role="checkbox"' +
         ' aria-checked="' + (done ? 'true' : 'false') + '"' +
         ' aria-label="Следовал сегодня: ' + esc(c.text) + '"' +
-        ' onclick="toggleCredo(\'' + esc(c.id) + '\')">' + (done ? '✓' : '') + '</button>' +
+        ' data-act="toggle-credo" data-id="' + esc(c.id) + '">' + (done ? '✓' : '') + '</button>' +
       '<div style="flex:1">' +
-        '<div class="cr-text" onclick="editCredo(\'' + esc(c.id) + '\')">' + esc(c.text) + '</div>' +
+        '<div class="cr-text" data-act="edit-credo" data-id="' + esc(c.id) + '">' + esc(c.text) + '</div>' +
         (streak >= 2
           ? '<div class="cr-streak">🔥 ' + streak + ' ' + plural(streak, 'день', 'дня', 'дней') + ' подряд</div>'
           : '') +
@@ -2704,12 +2820,13 @@ function editCredo(id){
 
 function renderQuotes(){
   renderQuote();     // цитата дня в верхней карточке
+  updateSaveQuoteBtn();
   const box = document.getElementById('quotes-list');
 
   if(!sections.quotes.length){
     box.innerHTML = emptyBlock('💬', 'Своих цитат пока нет',
       'Сюда стоит складывать то, что хочется перечитывать. Наверху — цитата дня из встроенной подборки.',
-      '+ Своя цитата', 'openQuoteModal()');
+      '+ Своя цитата', 'new-quote');
     return;
   }
 
@@ -2717,12 +2834,12 @@ function renderQuotes(){
   const list = sections.quotes.slice().sort((a, b)=> (b.fav ? 1 : 0) - (a.fav ? 1 : 0));
   box.innerHTML = list.map(q=>
     '<div class="quote-item">' +
-      '<div class="qi-text" onclick="editQuote(\'' + esc(q.id) + '\')">«' + esc(q.text) + '»</div>' +
+      '<div class="qi-text" data-act="edit-quote" data-id="' + esc(q.id) + '">«' + esc(q.text) + '»</div>' +
       '<div class="qi-bottom">' +
         '<span class="qi-author">' + (q.author ? esc(q.author) : 'без автора') + '</span>' +
         '<button class="fav-btn' + (q.fav ? ' on' : '') + '"' +
           ' aria-label="В избранное" aria-pressed="' + (q.fav ? 'true' : 'false') + '"' +
-          ' onclick="toggleFavQuote(\'' + esc(q.id) + '\')">⭐</button>' +
+          ' data-act="fav-quote" data-id="' + esc(q.id) + '">⭐</button>' +
       '</div>' +
     '</div>').join('');
 }
@@ -2901,11 +3018,16 @@ function txInMonth(t, y, m){
 // ── Загрузка операций ─────────────────────────────────────────────────────
 // Тянем последние 13 месяцев: этого хватает и на текущий экран, и на
 // годовой график, а объём остаётся небольшим.
+// Насколько месяцев назад уже загружены операции. При листании глубже
+// окно расширяется: раньше за двенадцатым месяцем шёл пустой экран, будто
+// трат в тот месяц не было вовсе.
+let moneyMonthsBack = 12;
+
 async function loadTransactions(){
   if(isDemoMode){ moneyLoaded = true; return; }
   if(!currentUser) return;
 
-  const from = new Date(ty, tm - 12, 1);
+  const from = new Date(ty, tm - moneyMonthsBack, 1);
   try{
     const res = await sbFetchWithTimeout(()=>
       sb.from('transactions')
@@ -2925,16 +3047,39 @@ async function loadTransactions(){
     }
     moneyTableMissing = false;
     txs = res.data || [];
+
+    // Неотправленные операции добавляем к серверным: иначе введённое без
+    // сети пропадало бы с экрана после перезагрузки.
+    const pending = txQueueRead();
+    if(pending.length){
+      const known = new Set(txs.map(t => t.id));
+      pending.forEach(p=>{ if(!known.has(p.id)) txs.push(p); });
+      txs.sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
+    }
     moneyLoaded = true;
+    await flushTxQueue();
   }catch(e){
+    // Без сети показываем хотя бы то, что не успело уехать.
+    txs = txQueueRead();
     setSyncStatus('деньги: нет сети', false);
   }
 }
 
-function moneyNavigate(d){
+async function moneyNavigate(d){
   moneyOffset += d;
   if(moneyOffset > 0) moneyOffset = 0;      // будущих месяцев не бывает
   renderMoney();
+
+  // Ушли за пределы загруженного окна — расширяем его и догружаем.
+  // Годовой график смотрит на 11 месяцев назад от текущего экрана.
+  const needBack = Math.abs(moneyOffset) + 12;
+  if(!isDemoMode && currentUser && needBack > moneyMonthsBack){
+    moneyMonthsBack = needBack;
+    setSyncStatus('загружаем историю...', false);
+    await loadTransactions();
+    setSyncStatus('', false);
+    renderMoney();
+  }
 }
 
 function renderMoney(){
@@ -2995,7 +3140,8 @@ function renderMoney(){
     const head = '<div class="money-day">' + d.getDate() + ' ' + MON_S[d.getMonth()] + '</div>';
     const rows = byDay[day].map(t=>{
       const c = catById(t.kind, t.category);
-      return '<button class="money-line" onclick="openTxModal(\'' + t.kind + '\',\'' + esc(t.id) + '\')">' +
+      return '<button class="money-line" data-act="open-tx"' +
+        ' data-kind="' + esc(t.kind) + '" data-id="' + esc(t.id) + '">' +
         '<span class="m-cat">' + esc(c.icon) + '</span>' +
         '<span class="m-mid">' +
           '<span class="m-title">' + esc(c.name) + '</span>' +
@@ -3130,7 +3276,48 @@ async function saveTxModal(){
   await pushTx(row);
 }
 
-async function pushTx(row){
+// ── Очередь неотправленных операций ───────────────────────────────────────
+// Без неё операция, введённая без сети, жила только в памяти вкладки и
+// исчезала при перезагрузке: на экране она есть, в базе её нет.
+function txQueueKey(){ return 'txq_' + ((currentUser && currentUser.id) || 'anon'); }
+
+function txQueueRead(){
+  try{
+    const v = JSON.parse(localStorage.getItem(txQueueKey()) || '[]');
+    return Array.isArray(v) ? v : [];
+  }catch(e){ return []; }
+}
+
+function txQueueWrite(list){
+  try{ localStorage.setItem(txQueueKey(), JSON.stringify(list)); }catch(e){}
+}
+
+function txQueueAdd(row){
+  const list = txQueueRead().filter(r => r.id !== row.id);
+  list.push(row);
+  txQueueWrite(list);
+  setSyncStatus('операций не отправлено: ' + list.length, false);
+}
+
+function txQueueDrop(id){
+  txQueueWrite(txQueueRead().filter(r => r.id !== id));
+}
+
+async function flushTxQueue(){
+  if(isDemoMode || !currentUser) return;
+  const list = txQueueRead();
+  if(!list.length) return;
+  for(const row of list){
+    await pushTx(row, {silent: true});
+  }
+  const left = txQueueRead().length;
+  if(!left){
+    setSyncStatus('операции синхронизированы ✓', true);
+    setTimeout(()=>setSyncStatus('', false), 1500);
+  }
+}
+
+async function pushTx(row, opts){
   if(isDemoMode || !currentUser) return;
   try{
     const res = await sbFetchWithTimeout(()=>
@@ -3140,12 +3327,17 @@ async function pushTx(row){
       )
     );
     if(res.error) throw new Error(res.error.message);
-    setSyncStatus('операция сохранена ✓', true);
-    setTimeout(()=>setSyncStatus('', false), 1500);
+    txQueueDrop(row.id);
+    if(!opts || !opts.silent){
+      setSyncStatus('операция сохранена ✓', true);
+      setTimeout(()=>setSyncStatus('', false), 1500);
+    }
   }catch(e){
-    // Операция осталась на экране, но в базу не ушла — молчать об этом нельзя.
-    toast('Операция не сохранена на сервере: ' + e.message, true);
-    setSyncStatus('операция не отправлена', false);
+    // Операция остаётся в очереди и уйдёт при возврате сети или на старте.
+    txQueueAdd(row);
+    if(!opts || !opts.silent){
+      toast('Операция сохранена локально, отправим при связи', false);
+    }
   }
 }
 
@@ -3208,6 +3400,9 @@ async function deleteTxFromModal(){
     if(event === 'SIGNED_OUT'){
       currentUser = null;
       data = {};
+      sections = {goals: [], list100: [], credo: [], quotes: []};
+      txs = [];
+      moneyLoaded = false;
       showScreen('auth');
       return;
     }
@@ -3221,6 +3416,11 @@ async function deleteTxFromModal(){
         data = {};
         HABITS = cloneDefaults();
         localStorage.removeItem('customHabits');
+        // Разделы и операции тоже принадлежат прежнему аккаунту: без сброса
+        // новый пользователь видел бы чужие цели и траты до конца загрузки.
+        sections = {goals: [], list100: [], credo: [], quotes: []};
+        txs = [];
+        moneyLoaded = false;
       }
       showScreen('app');
       initTabs();

@@ -512,6 +512,16 @@ body.magic-cursor *, body.magic-cursor{cursor:url("data:image/svg+xml;utf8,<svg 
 .cat-chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
 .btn-danger{background:none;border:1px solid var(--border);color:#dc2626;margin-right:auto}
 
+/* Многострочный текст остаётся многострочным. Пользователь набирает
+   принцип или цитату в несколько строк, а HTML по умолчанию схлопывает
+   переводы строк в пробелы — и запись теряет форму.
+   pre-line: переносы уважаем, лишние пробелы схлопываем. */
+.task-text, .cr-text, .qi-text, .ct-text, .m-note{white-space:pre-line}
+
+.quote-actions{display:flex;gap:8px;margin-top:12px}
+.quote-actions .btn{flex:1}
+.quote-actions .btn:disabled{opacity:.55;cursor:default}
+
 /* Широкий экран: цели в три колонки. Правило стоит последним намеренно —
    выше по файлу его перебивало бы обычное .goals-grid с двумя колонками. */
 @media (min-width:1100px){

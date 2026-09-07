@@ -186,6 +186,41 @@ test('Quotes: цитата дня, своя цитата и избранное',
   expect(pageErrors).toEqual([]);
 });
 
+test('Quotes: цитата дня забирается в свою подборку', async ({page}) => {
+  await openTab(page, 'quotes');
+
+  const before = await page.evaluate(() => sections.quotes.length);
+  const dayQuote = await page.locator('#quote-text').innerText();
+
+  await page.locator('#save-quote-btn').click();
+
+  // Кнопка становится неактивной: повторно сохранять ту же цитату незачем.
+  await expect(page.locator('#save-quote-btn')).toBeDisabled();
+  await expect(page.locator('#save-quote-btn')).toHaveText(/В подборке/);
+  expect(await page.evaluate(() => sections.quotes.length)).toBe(before + 1);
+  await expect(page.locator('.quote-item').filter({hasText: dayQuote.slice(0, 30)})).toBeVisible();
+
+  // Другая цитата — кнопка снова активна.
+  await page.getByRole('button', {name: /Другая/}).click();
+  await expect(page.locator('#save-quote-btn')).toBeEnabled();
+});
+
+test('переносы строк в тексте сохраняются', async ({page}) => {
+  await openTab(page, 'credo');
+
+  await page.locator('#add-credo-btn').click();
+  await page.locator('#text-modal-input').fill('я\nя\nя');
+  await page.locator('#text-modal-save').click();
+
+  const row = page.locator('.cr-text').filter({hasText: 'я'}).last();
+  await expect(row).toBeVisible();
+
+  // Текст сохранён с переводами строк, и CSS их не схлопывает.
+  expect(await page.evaluate(() => sections.credo[sections.credo.length - 1].text)).toBe('я\nя\nя');
+  const ws = await row.evaluate(el => getComputedStyle(el).whiteSpace);
+  expect(ws).toBe('pre-line');
+});
+
 test('Money: месяц, статистика и графики', async ({page, pageErrors}) => {
   await openTab(page, 'money');
 
