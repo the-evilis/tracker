@@ -457,6 +457,9 @@ body.magic-cursor *, body.magic-cursor{cursor:url("data:image/svg+xml;utf8,<svg 
    шириной у него просто игнорировались бы — полоса оставалась пустой. */
 .cat-bar .cb-fill{display:block;height:100%;border-radius:4px;background:var(--accent)}
 .cat-bar .cb-sum{font-size:12px;color:var(--text);width:78px;text-align:right;flex-shrink:0}
+/* У бюджета в подписи две суммы, поэтому ей нужно больше места. */
+.budget-bar .cb-sum{width:118px}
+.budget-bar .cb-name{width:76px}
 .months-chart{display:flex;align-items:flex-end;gap:8px;height:120px}
 .months-chart .mc-col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;
   align-items:center;gap:3px;height:100%}
@@ -483,6 +486,63 @@ body.magic-cursor *, body.magic-cursor{cursor:url("data:image/svg+xml;utf8,<svg 
 .credo-row .cr-text{flex:1;font-size:14px;line-height:1.5;color:var(--text);
   cursor:pointer;word-break:break-word}
 .credo-row .cr-streak{font-size:11px;color:var(--text3);white-space:nowrap;margin-top:2px}
+.credo-today .ct-week{font-size:12px;color:var(--text2);margin-top:10px}
+/* Неделя принципа: семь точек с подписью дня. */
+.cr-week{display:flex;gap:5px;margin-top:8px}
+.cw-day{display:flex;flex-direction:column;align-items:center;gap:2px}
+.cw-day i{width:14px;height:14px;border-radius:4px;background:var(--surface2);
+  border:1px solid var(--border);display:block}
+.cw-day.on i{background:var(--accent);border-color:var(--accent)}
+.cw-day em{font-size:9px;color:var(--text3);font-style:normal}
+.cr-habit{font-size:11px;color:var(--text3);margin-top:6px}
+.cr-note{font-size:12px;color:var(--text2);margin-top:6px;cursor:pointer;
+  white-space:pre-line;border-left:2px solid var(--border);padding-left:8px}
+.cr-note-btn{border:none;background:none;color:var(--text3);font-family:var(--sans);
+  font-size:11px;cursor:pointer;padding:4px 0;margin-top:4px}
+.cr-note-btn:hover{color:var(--accent)}
+
+/* ── Вид «Сегодня» ── */
+.today-head{font-size:13px;color:var(--text2);margin-bottom:12px}
+.today-head b{font-family:var(--serif);font-size:20px;color:var(--text);font-style:italic}
+.today-sep{font-size:11px;color:var(--text3);text-transform:uppercase;
+  letter-spacing:.04em;margin:20px 0 10px}
+.today-row{display:flex;align-items:center;gap:12px;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--radius);padding:14px;
+  margin-bottom:10px;box-shadow:var(--shadow);transition:opacity .2s}
+.today-row.done{opacity:.6}
+.today-row.done .habit-name{text-decoration:line-through;color:var(--text3)}
+.today-row.offplan{opacity:.75;border-style:dashed}
+.today-mid{flex:1;min-width:0}
+.today-meta{font-size:11px;color:var(--text3);margin-top:3px}
+/* Крупная зона нажатия: этим экраном пользуются на ходу и одной рукой. */
+.today-check{width:44px;height:44px;border-radius:14px;flex-shrink:0;cursor:pointer;
+  border:2px solid var(--border);background:var(--surface2);color:#fff;
+  font-size:18px;display:flex;align-items:center;justify-content:center;
+  transition:background .2s,border-color .2s,transform .1s}
+.today-check:active{transform:scale(.94)}
+.today-check[aria-checked="true"]{background:var(--habit,var(--accent));
+  border-color:var(--habit,var(--accent))}
+.today-check:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ── Деньги: инструменты, бюджеты, сравнение ── */
+.money-tools{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;justify-content:center}
+.link-btn{border:none;background:none;color:var(--text2);font-family:var(--sans);
+  font-size:12px;cursor:pointer;padding:4px 2px;border-bottom:1px dashed var(--border)}
+.link-btn:hover{color:var(--accent)}
+.stat-delta{margin-top:4px}
+.delta{font-size:10px;letter-spacing:.02em}
+.delta.up{color:#c2410c}
+.delta.down{color:var(--accent)}
+.delta.same{color:var(--text3)}
+.budget-bar.warn .cb-fill{background:#BA7517}
+.budget-bar.over .cb-fill{background:#dc2626}
+.budget-bar.over .cb-sum{color:#dc2626}
+.budget-edit{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.budget-input{margin:0;width:120px;text-align:right}
+.rule-row{display:flex;align-items:center;gap:10px;padding:10px 0;
+  border-bottom:1px solid var(--border)}
+.rule-row:last-of-type{border-bottom:none}
+.rule-done{color:var(--accent);font-size:15px;padding:0 6px}
 .quote-item{background:var(--surface);border:1px solid var(--border);
   border-radius:var(--radius-sm);padding:14px;margin-bottom:8px;box-shadow:var(--shadow)}
 .quote-item .qi-text{font-family:var(--serif);font-size:16px;line-height:1.45;
@@ -521,6 +581,39 @@ body.magic-cursor *, body.magic-cursor{cursor:url("data:image/svg+xml;utf8,<svg 
 .quote-actions{display:flex;gap:8px;margin-top:12px}
 .quote-actions .btn{flex:1}
 .quote-actions .btn:disabled{opacity:.55;cursor:default}
+
+/* ── Сроки, привычки цели, категории списка ста ── */
+.field-label{display:block;font-size:11px;color:var(--text3);text-transform:uppercase;
+  letter-spacing:.04em;margin:4px 0 6px}
+.hint{font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:12px}
+.habit-pick{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;
+  max-height:150px;overflow-y:auto}
+.due-ok{color:var(--accent)}
+.due-bad{color:#dc2626}
+.goal-habits-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px}
+.gh-pct{font-family:var(--serif);font-size:20px;color:var(--text)}
+.gh-chip{font-size:11px;color:var(--text2);background:var(--surface);
+  border:1px solid var(--border);border-left:3px solid var(--habit,var(--accent));
+  border-radius:8px;padding:5px 9px}
+.task-mid{flex:1;min-width:0;cursor:pointer;display:block}
+.task-meta{display:block;font-size:11px;color:var(--text3);margin-top:3px;white-space:pre-line}
+.task-cat{font-size:15px;flex-shrink:0}
+.filter-row{margin-bottom:14px}
+.hundred-last{font-size:11px;opacity:.9;margin-top:10px;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+
+/* ── Архив целей ── */
+.archive-block{margin-top:18px;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:12px 14px;box-shadow:var(--shadow)}
+.archive-block summary{font-size:12px;color:var(--text3);cursor:pointer;
+  text-transform:uppercase;letter-spacing:.04em}
+.arch-row{display:flex;align-items:center;gap:10px;padding:10px 0;
+  border-bottom:1px solid var(--border)}
+.arch-row:last-child{border-bottom:none}
+.arch-ico{font-size:17px}
+.arch-name{flex:1;font-size:14px;color:var(--text2);cursor:pointer}
+.arch-sub{font-size:11px;color:var(--text3)}
+.arch-btn{padding:5px 10px;font-size:12px}
 
 /* Широкий экран: цели в три колонки. Правило стоит последним намеренно —
    выше по файлу его перебивало бы обычное .goals-grid с двумя колонками. */

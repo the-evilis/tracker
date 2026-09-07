@@ -28,7 +28,7 @@ function leaveDemo(){
   data = {};
   marksValues = {};
   HABITS = cloneDefaults();
-  sections = {goals: [], list100: [], credo: [], quotes: []};
+  sections = {goals: [], list100: [], credo: [], quotes: [], money_rules: [], budgets: []};
   txs = [];
   document.getElementById('demo-banner').style.display = 'none';
   showScreen('auth');
@@ -99,6 +99,17 @@ function seedDemoSections(){
     quotes: [
       {id:'demo-q1', text:'Дисциплина — это выбор между тем, чего хочешь сейчас, и тем, чего хочешь больше всего.', author:'', fav:true},
       {id:'demo-q2', text:'Ты не поднимаешься до уровня своих целей, ты падаешь до уровня своих систем.', author:'Джеймс Клир', fav:false}
+    ],
+    // Повторы и бюджеты — чтобы в демо было видно, зачем они нужны.
+    money_rules: [
+      {id:'demo-r1', kind:'expense', amount:4500000, category:'home',  note:'Аренда',    day:5},
+      {id:'demo-r2', kind:'expense', amount:129000,  category:'subs',  note:'Подписки',  day:12},
+      {id:'demo-r3', kind:'income',  amount:18000000, category:'salary', note:'Основной доход', day:5}
+    ],
+    budgets: [
+      {cat:'food',     limit:2500000},
+      {cat:'fun',      limit:800000},
+      {cat:'shopping', limit:1000000}
     ]
   };
 
@@ -795,6 +806,12 @@ function navigate(d){ if(view==='year') return; offset+=d; render(); }
 function getDIM(y,m){ return new Date(y,m+1,0).getDate(); }
 
 function getViewDays(){
+  // «Сегодня» — один день: список того, что осталось на сейчас, без сетки
+  // за неделю. Именно за этим открывают приложение вечером.
+  if(view==='today'){
+    const d = new Date(ty, tm, td);
+    return [{y: ty, m: tm, d: td, date: d}];
+  }
   if(view==='year'){
     // Скользящее окно в 365 дней: у годового вида нет «предыдущего года»,
     // стрелки для него скрыты.
@@ -820,6 +837,7 @@ function isToday(day){ return day.y===ty&&day.m===tm&&day.d===td; }
 function isFuture(day){ return new Date(day.y,day.m,day.d)>new Date(ty,tm,td); }
 
 function navTitle(days){
+  if(view==='today') return 'Сегодня';
   if(view==='year') return 'Последние 12 месяцев';
   if(view==='week'){ const f=days[0],l=days[6]; return f.m===l.m?f.d+'–'+l.d+' '+MON_F[f.m]:f.d+' '+MON_F[f.m].slice(0,3)+' – '+l.d+' '+MON_F[l.m].slice(0,3); }
   const b=new Date(ty,tm+offset,1); return MON_F[b.getMonth()]+' '+b.getFullYear();
@@ -1020,7 +1038,8 @@ function renderStats(days){
   ).join('');
 
   const per = document.getElementById('stats-period');
-  if(per) per.textContent = view === 'week' ? 'за эту неделю'
+  if(per) per.textContent = view === 'today' ? 'сегодня'
+                          : view === 'week' ? 'за эту неделю'
                           : view === 'month' ? 'за ' + MON_F[new Date(ty, tm+offset, 1).getMonth()].toLowerCase()
                           : 'за 12 месяцев';
 }
@@ -1168,16 +1187,17 @@ function streakLabel(s, color, unit){
 function render(){
   const days = getViewDays();
   document.getElementById('nav-title').textContent = navTitle(days);
-  ['week','month','year'].forEach(v=>{
+  ['today','week','month','year'].forEach(v=>{
     const b = document.getElementById('btn-'+v);
     if(!b) return;
     b.className = 'view-btn' + (view===v ? ' active' : '');
     b.setAttribute('aria-selected', view===v ? 'true' : 'false');
   });
-  // У годового вида окно всегда одно — последние 12 месяцев, листать нечего.
-  const isYear = view === 'year';
-  document.getElementById('btn-prev').style.visibility = isYear ? 'hidden' : '';
-  document.getElementById('btn-next').style.visibility = isYear ? 'hidden' : '';
+  // У годового вида окно всегда одно — последние 12 месяцев, листать нечего;
+  // у «сегодня» листать тем более некуда.
+  const fixed = view === 'year' || view === 'today';
+  document.getElementById('btn-prev').style.visibility = fixed ? 'hidden' : '';
+  document.getElementById('btn-next').style.visibility = fixed ? 'hidden' : '';
 
   const DN=['Воскресенье','Понедельник','Вторник','Среда','Четверг','Пятница','Суббота'];
   document.getElementById('date-sub').textContent = DN[today.getDay()]+', '+td+' '+MON_S[tm];
@@ -1197,9 +1217,72 @@ function render(){
     return;
   }
 
-  if(view==='week') renderWeek(days);
+  if(view==='today') renderToday(days[0]);
+  else if(view==='week') renderWeek(days);
   else if(view==='month') renderMonth(days);
   else renderYear();
+}
+
+// ── ВИД «СЕГОДНЯ» ─────────────────────────────────────────────────────────
+// Только то, что ждут сегодня: крупные строки, которые закрываются одним
+// касанием. Сделанное уезжает вниз и гаснет — список тает на глазах.
+function renderToday(day){
+  document.getElementById('week-header').style.display = 'none';
+
+  const due = activeHabits().filter(h => isPlannedDay(h, day));
+  const rest = activeHabits().filter(h => !isPlannedDay(h, day));
+
+  if(!due.length){
+    document.getElementById('habits-list').innerHTML =
+      '<div class="empty"><div class="empty-emoji">🌤</div>' +
+      '<h3>На сегодня ничего не запланировано</h3>' +
+      '<p>По графику сегодня свободный день. Можно отметить что-то из внепланового ниже.</p></div>' +
+      (rest.length ? todayRows(rest, day, true) : '');
+    return;
+  }
+
+  const undone = due.filter(h => !data[dkey(day.y, day.m, day.d, h.id)]);
+  const done = due.filter(h => data[dkey(day.y, day.m, day.d, h.id)]);
+
+  document.getElementById('habits-list').innerHTML =
+    '<div class="today-head">' +
+      (undone.length
+        ? '<b>Осталось ' + undone.length + '</b> из ' + due.length
+        : '<b>Всё закрыто</b> · ' + due.length + ' из ' + due.length) +
+    '</div>' +
+    todayRows(undone, day) +
+    (done.length ? '<div class="today-sep">Сделано</div>' + todayRows(done, day) : '') +
+    (rest.length ? '<div class="today-sep">Не по графику</div>' + todayRows(rest, day, true) : '');
+}
+
+function todayRows(list, day, offplan){
+  return list.map(h=>{
+    const k = dkey(day.y, day.m, day.d, h.id);
+    const done = !!data[k];
+    const target = habitTarget(h);
+    const val = target ? getValue(k) : 0;
+    const streak = getStreak(h);
+
+    return '<div class="today-row' + (done ? ' done' : '') + (offplan ? ' offplan' : '') + '"' +
+      ' data-habit="' + esc(h.id) + '" style="--habit:' + esc(h.color) + '">' +
+      '<div class="habit-icon" style="--habit:' + esc(h.color) + ';--habit-bg:' +
+        esc(h.bg || '#EEEDFE') + '">' + esc(h.icon) + '</div>' +
+      '<div class="today-mid">' +
+        '<div class="habit-name">' + esc(h.name) + '</div>' +
+        '<div class="today-meta">' +
+          (target ? (done ? target + ' из ' + target : val + ' из ' + target) + ' · ' : '') +
+          (streak >= 1 ? '🔥 ' + streak + ' ' + (streakUnit(h) === 'week'
+              ? plural(streak, 'неделя', 'недели', 'недель')
+              : plural(streak, 'день', 'дня', 'дней'))
+            : esc(scheduleLabel(h))) +
+        '</div>' +
+      '</div>' +
+      '<button type="button" class="today-check" role="checkbox"' +
+        ' aria-checked="' + (done ? 'true' : 'false') + '"' +
+        ' aria-label="' + esc(h.name) + ', сегодня"' +
+        dotAttrs(day, h, false) + '>' + (done ? '✓' : (target ? '+' : '')) + '</button>' +
+    '</div>';
+  }).join('');
 }
 
 // data-атрибуты точки: по ним обработчик-делегат понимает, что переключать.
@@ -1482,7 +1565,9 @@ document.addEventListener('keydown', e=>{
   if(document.getElementById('edit-modal').classList.contains('open')){ closeModal(); return; }
   // Модалки разделов закрываются тем же Esc: каждая знает, как убраться
   // за собой, поэтому вызываем её собственный обработчик.
-  const closers = {'goal-modal': closeGoalModal, 'tx-modal': closeTxModal, 'text-modal': closeTextModal};
+  const closers = {'goal-modal': closeGoalModal, 'tx-modal': closeTxModal,
+                   'text-modal': closeTextModal, 'rules-modal': closeRulesModal,
+                   'budget-modal': closeBudgetModal};
   for(const id in closers){
     if(document.getElementById(id).classList.contains('open')){ closers[id](); return; }
   }
@@ -2252,8 +2337,11 @@ function importData(e){
 
 // Данные разделов. Пустые массивы — валидное состояние: раздел покажет
 // пустое состояние с кнопкой действия, а не сломанный экран.
-let sections = {goals: [], list100: [], credo: [], quotes: []};
-const SECTION_KEYS = ['goals', 'list100', 'credo', 'quotes'];
+// money_rules — повторяющиеся операции (аренда, подписки), budgets —
+// лимиты по категориям. Оба списка ведут себя как остальные разделы,
+// поэтому хранятся тем же способом.
+let sections = {goals: [], list100: [], credo: [], quotes: [], money_rules: [], budgets: []};
+const SECTION_KEYS = ['goals', 'list100', 'credo', 'quotes', 'money_rules', 'budgets'];
 
 function sectionKey(key){ return 'sec_' + key + '_' + ((currentUser && currentUser.id) || 'anon'); }
 
@@ -2375,6 +2463,9 @@ const SECTION_ACTIONS = {
   'new-goal':     ()  => openGoalModal(),
   'edit-goal':    el => openGoalModal(el.dataset.id),
   'del-goal':     el => deleteGoal(el.dataset.id),
+  'unarchive-goal': el => unarchiveGoal(el.dataset.id),
+  'edit-item':    el => editHundredItem(el.dataset.id),
+  'filter-100':   el => setHundredFilter(el.dataset.cat),
   'add-task':     ()  => addTask(),
   'toggle-task':  el => toggleTask(el.dataset.id),
   'edit-task':    el => editTask(el.dataset.id),
@@ -2382,10 +2473,14 @@ const SECTION_ACTIONS = {
   'new-credo':    ()  => openCredoModal(),
   'toggle-credo': el => toggleCredo(el.dataset.id),
   'edit-credo':   el => editCredo(el.dataset.id),
+  'note-credo':   el => noteCredo(el.dataset.id),
   'new-quote':    ()  => openQuoteModal(),
   'edit-quote':   el => editQuote(el.dataset.id),
   'fav-quote':    el => toggleFavQuote(el.dataset.id),
-  'open-tx':      el => openTxModal(el.dataset.kind, el.dataset.id)
+  'open-tx':      el => openTxModal(el.dataset.kind, el.dataset.id),
+  'apply-rule':   el => applyRule(el.dataset.id),
+  'apply-all-rules': () => applyAllRules(),
+  'del-rule':     el => deleteRule(el.dataset.id)
 };
 
 document.addEventListener('click', e=>{
@@ -2459,12 +2554,77 @@ function emptyBlock(emoji, title, text, btnLabel, action){
 
 const HUNDRED_ID = '__100__';   // список ста живёт как особая «цель»
 
+// Категории пунктов: после полусотни записей плоский список превращается
+// в кашу, а по этим группам его видно с одного взгляда.
+const HUNDRED_CATS = [
+  {id:'travel',  icon:'✈️', name:'Путешествия'},
+  {id:'skill',   icon:'🧠', name:'Навыки'},
+  {id:'body',    icon:'💪', name:'Тело'},
+  {id:'people',  icon:'🤝', name:'Люди'},
+  {id:'work',    icon:'💼', name:'Дело'},
+  {id:'thing',   icon:'🎁', name:'Вещи'},
+  {id:'other',   icon:'🔸', name:'Разное'}
+];
+let hundredFilter = 'all';
+
+function hundredCat(id){
+  return HUNDRED_CATS.find(c => c.id === id) || HUNDRED_CATS[HUNDRED_CATS.length - 1];
+}
+
+function setHundredFilter(cat){
+  hundredFilter = cat || 'all';
+  renderGoalDetail();
+}
+
+// Дата выполнения человеческим языком: «сегодня», «вчера», «12 мар 2026».
+function doneDateLabel(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(isNaN(d)) return '';
+  const diff = Math.round((new Date(ty, tm, td) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+  if(diff === 0) return 'сегодня';
+  if(diff === 1) return 'вчера';
+  return d.getDate() + ' ' + MON_S[d.getMonth()] + (d.getFullYear() !== ty ? ' ' + d.getFullYear() : '');
+}
+
 function goalById(id){ return sections.goals.find(g => g.id === id) || null; }
 
 function goalProgress(g){
   const tasks = (g && g.tasks) || [];
   const done = tasks.filter(t => t.done).length;
   return {done, total: tasks.length, pct: tasks.length ? Math.round(done / tasks.length * 100) : 0};
+}
+
+function activeGoals(){ return sections.goals.filter(g => !g.archived); }
+function archivedGoals(){ return sections.goals.filter(g => g.archived); }
+
+// Сколько дней осталось до срока. Отрицательное — срок прошёл.
+function daysLeft(due){
+  if(!due) return null;
+  const d = new Date(due + 'T00:00:00');
+  if(isNaN(d)) return null;
+  return Math.round((d - new Date(ty, tm, td)) / 86400000);
+}
+
+// Подпись срока человеческим языком: «осталось 12 дней», «сегодня»,
+// «просрочено на 3 дня» — голая дата требует считать в уме.
+function dueLabel(due){
+  const n = daysLeft(due);
+  if(n === null) return '';
+  if(n === 0) return 'срок сегодня';
+  if(n < 0) return 'просрочено на ' + Math.abs(n) + ' ' + plural(Math.abs(n), 'день', 'дня', 'дней');
+  if(n === 1) return 'остался 1 день';
+  return 'осталось ' + n + ' ' + plural(n, 'день', 'дня', 'дней');
+}
+
+// Средний процент за месяц по привычкам, привязанным к цели. Так карточка
+// показывает не только «сколько задач закрыто», но и живёт ли цель вообще.
+function goalHabitPct(g){
+  const ids = (g && g.habitIds) || [];
+  const linked = activeHabits().filter(h => ids.indexOf(h.id) !== -1);
+  if(!linked.length) return null;
+  const sum = linked.reduce((s, h) => s + getMonthPct(h), 0);
+  return {pct: Math.round(sum / linked.length), count: linked.length};
 }
 
 function renderFocus(){
@@ -2475,6 +2635,11 @@ function renderFocus(){
   for(let i = 0; i < 100; i++){
     dots.push('<span class="' + (i < done ? 'done' : '') + '"></span>');
   }
+  // Последнее закрытое — самая живая строчка на карточке: она показывает,
+  // что список не музейный экспонат.
+  const last = list.filter(i => i.done && i.doneAt)
+                   .sort((a, b) => (a.doneAt < b.doneAt ? 1 : -1))[0];
+
   document.getElementById('hundred-card').innerHTML =
     '<button class="hundred-card" data-act="open-hundred">' +
       '<h3>100</h3>' +
@@ -2482,28 +2647,60 @@ function renderFocus(){
         ? done + ' из ' + list.length + ' сделано'
         : 'список того, что стоит успеть') + '</div>' +
       '<div class="hundred-dots">' + dots.join('') + '</div>' +
+      (last ? '<div class="hundred-last">Последнее: ' + esc(last.text) +
+              ' · ' + esc(doneDateLabel(last.doneAt)) + '</div>' : '') +
     '</button>';
 
   const grid = document.getElementById('goals-grid');
-  if(!sections.goals.length){
+  const active = activeGoals();
+
+  if(!active.length){
     grid.innerHTML = emptyBlock('🎯', 'Целей пока нет',
       'Направление — это несколько задач с общим смыслом: спорт, бизнес, язык. Начните с одного.',
       '+ Новая цель', 'new-goal');
-    return;
+  } else {
+    grid.innerHTML = active.map(g=>{
+      const p = goalProgress(g);
+      const hp = goalHabitPct(g);
+      const due = dueLabel(g.due);
+      const overdue = daysLeft(g.due) !== null && daysLeft(g.due) < 0;
+
+      // Вторая строка подписи — то, что важнее прямо сейчас: горящий срок
+      // важнее процента по привычкам, а он важнее пустоты.
+      const sub = due
+        ? (overdue ? '⚠ ' : '⏳ ') + due
+        : hp ? '📈 привычки: ' + hp.pct + '% за месяц'
+             : (p.total ? p.done + ' из ' + p.total + ' задач' : 'нет задач');
+
+      return '<button class="goal-card" style="background:' + esc(g.color || '#7F77DD') + '"' +
+        ' data-act="open-goal" data-id="' + esc(g.id) + '">' +
+        '<div class="goal-ico">' + esc(g.icon || '🎯') + '</div>' +
+        '<div>' +
+          '<div class="goal-name">' + esc(g.name) + '</div>' +
+          '<div class="goal-sub">' + esc(sub) + '</div>' +
+          (due && p.total ? '<div class="goal-sub">' + p.done + ' из ' + p.total + ' задач</div>' : '') +
+        '</div>' +
+        '<div class="goal-bar"><i style="width:' + p.pct + '%"></i></div>' +
+      '</button>';
+    }).join('');
   }
 
-  grid.innerHTML = sections.goals.map(g=>{
-    const p = goalProgress(g);
-    return '<button class="goal-card" style="background:' + esc(g.color || '#7F77DD') + '"' +
-      ' data-act="open-goal" data-id="' + esc(g.id) + '">' +
-      '<div class="goal-ico">' + esc(g.icon || '🎯') + '</div>' +
-      '<div>' +
-        '<div class="goal-name">' + esc(g.name) + '</div>' +
-        '<div class="goal-sub">' + (p.total ? p.done + ' из ' + p.total + ' задач' : 'нет задач') + '</div>' +
-      '</div>' +
-      '<div class="goal-bar"><i style="width:' + p.pct + '%"></i></div>' +
-    '</button>';
-  }).join('');
+  // Архив: завершённые цели не удаляются, но и не мозолят глаза.
+  const arch = archivedGoals();
+  document.getElementById('goals-archive').innerHTML = arch.length
+    ? '<details class="archive-block"><summary>Архив целей (' + arch.length + ')</summary>' +
+      arch.map(g=>{
+        const p = goalProgress(g);
+        return '<div class="arch-row">' +
+          '<span class="arch-ico">' + esc(g.icon || '🎯') + '</span>' +
+          '<span class="arch-name" data-act="open-goal" data-id="' + esc(g.id) + '">' +
+            esc(g.name) + '</span>' +
+          '<span class="arch-sub">' + p.done + ' из ' + p.total + '</span>' +
+          '<button class="btn btn-secondary arch-btn" data-act="unarchive-goal"' +
+            ' data-id="' + esc(g.id) + '">Вернуть</button>' +
+        '</div>';
+      }).join('') + '</details>'
+    : '';
 }
 
 // ── Экран одной цели ──────────────────────────────────────────────────────
@@ -2525,40 +2722,86 @@ function renderGoalDetail(){
 
   if(!hundred && !g){ setTab('focus'); return; }
 
-  const items = hundred ? sections.list100 : (g.tasks || []);
-  const done = items.filter(t => t.done).length;
+  const all = hundred ? sections.list100 : (g.tasks || []);
+  const items = (hundred && hundredFilter !== 'all')
+    ? all.filter(i => (i.cat || 'other') === hundredFilter)
+    : all;
+  const done = all.filter(t => t.done).length;
   const title = hundred ? '100' : g.name;
   const icon = hundred ? '💯' : (g.icon || '🎯');
   const sub = hundred
-    ? done + ' из ' + (items.length || 100) + ' сделано'
-    : (items.length ? done + ' из ' + items.length + ' задач' : 'нет задач');
+    ? done + ' из ' + (all.length || 100) + ' сделано'
+    : (all.length ? done + ' из ' + all.length + ' задач' : 'нет задач');
 
   document.getElementById('screen-title').textContent = hundred ? '100' : 'Focus';
 
-  const rows = items.map(t=>
-    '<div class="task-row' + (t.done ? ' done' : '') + '">' +
+  // Фильтр по категориям — только в списке ста: у задач цели его незачем.
+  const filterRow = hundred
+    ? '<div class="cat-row filter-row">' +
+        ['all'].concat(HUNDRED_CATS.map(c => c.id)).map(id=>{
+          const c = id === 'all' ? {icon:'∗', name:'Все'} : hundredCat(id);
+          const n = id === 'all' ? all.length : all.filter(i => (i.cat || 'other') === id).length;
+          if(id !== 'all' && !n) return '';       // пустые категории не показываем
+          return '<button class="cat-chip" data-act="filter-100" data-cat="' + id + '"' +
+            ' aria-pressed="' + (hundredFilter === id ? 'true' : 'false') + '">' +
+            esc(c.icon) + ' ' + esc(c.name) + ' ' + n + '</button>';
+        }).join('') +
+      '</div>'
+    : '';
+
+  const rows = items.map(t=>{
+    const cat = hundred ? hundredCat(t.cat) : null;
+    const meta = [];
+    if(t.done && t.doneAt) meta.push('✓ ' + doneDateLabel(t.doneAt));
+    if(t.note) meta.push(t.note);
+
+    return '<div class="task-row' + (t.done ? ' done' : '') + '">' +
       '<button type="button" class="task-check" role="checkbox"' +
         ' aria-checked="' + (t.done ? 'true' : 'false') + '"' +
         ' aria-label="' + esc(t.text) + '"' +
         ' data-act="toggle-task" data-id="' + esc(t.id) + '">' + (t.done ? '✓' : '') + '</button>' +
-      '<span class="task-text" data-act="edit-task" data-id="' + esc(t.id) + '">' + esc(t.text) + '</span>' +
+      (cat ? '<span class="task-cat" title="' + esc(cat.name) + '">' + esc(cat.icon) + '</span>' : '') +
+      '<span class="task-mid" data-act="' + (hundred ? 'edit-item' : 'edit-task') + '"' +
+        ' data-id="' + esc(t.id) + '">' +
+        '<span class="task-text">' + esc(t.text) + '</span>' +
+        (meta.length ? '<span class="task-meta">' + esc(meta.join(' · ')) + '</span>' : '') +
+      '</span>' +
       '<button class="task-del" data-act="del-task" data-id="' + esc(t.id) + '"' +
         ' aria-label="Удалить">✕</button>' +
-    '</div>').join('');
+    '</div>';
+  }).join('');
+
+  // Срок и привычки цели — прямо в шапке экрана.
+  const due = hundred ? '' : dueLabel(g.due);
+  const overdue = !hundred && daysLeft(g.due) !== null && daysLeft(g.due) < 0;
+  const hp = hundred ? null : goalHabitPct(g);
+  const linked = hundred ? [] : activeHabits().filter(h => (g.habitIds || []).indexOf(h.id) !== -1);
 
   box.innerHTML =
     '<div class="goal-head">' +
       '<div class="goal-ico">' + esc(icon) + '</div>' +
       '<div style="flex:1">' +
         '<h2>' + esc(title) + '</h2>' +
-        '<div class="goal-sub">' + esc(sub) + '</div>' +
+        '<div class="goal-sub">' + esc(sub) +
+          (due ? ' · <span class="' + (overdue ? 'due-bad' : 'due-ok') + '">' + esc(due) + '</span>' : '') +
+        '</div>' +
       '</div>' +
       (hundred ? '' :
         '<button class="icon-btn" data-act="edit-goal" data-id="' + esc(g.id) + '"' +
         ' aria-label="Изменить цель">✏️</button>') +
     '</div>' +
+    // Привычки цели: сразу видно, чем именно она поддержана в трекере.
+    (linked.length
+      ? '<div class="goal-habits-row">' +
+          (hp ? '<span class="gh-pct">' + hp.pct + '%</span>' : '') +
+          linked.map(h => '<span class="gh-chip" style="--habit:' + esc(h.color) + '">' +
+            esc(h.icon || '•') + ' ' + esc(h.name) + ' · ' + getMonthPct(h) + '%</span>').join('') +
+        '</div>'
+      : '') +
+    filterRow +
     (items.length ? rows : emptyBlock(hundred ? '💯' : '📝',
-        hundred ? 'Список пуст' : 'Задач пока нет',
+        hundred ? (hundredFilter === 'all' ? 'Список пуст' : 'В этой категории пусто')
+                : 'Задач пока нет',
         hundred ? 'Сто пунктов пишутся годами. Первый — прямо сейчас.'
                 : 'Разбейте цель на шаги, которые можно закрыть за раз.',
         '', '')) +
@@ -2591,12 +2834,40 @@ function addTask(){
   openTextModal({
     title: hundred ? 'Новый пункт' : 'Новая задача',
     placeholder: hundred ? 'Что стоит успеть' : 'Что нужно сделать',
-    onSave: text=>{
+    cats: hundred ? HUNDRED_CATS : null,
+    cat: hundred && hundredFilter !== 'all' ? hundredFilter : null,
+    withNote: hundred,
+    onSave: (text, note, cat)=>{
       const list = currentItems();
-      list.push({id: newId('t'), text: text, done: false});
+      const item = {id: newId('t'), text: text, done: false};
+      if(hundred){ item.cat = cat || 'other'; if(note) item.note = note; }
+      list.push(item);
       saveSection(currentSectionName());
       renderGoalDetail();
     }
+  });
+}
+
+// Пункт списка ста правится вместе с категорией и заметкой — у задач цели
+// ни того, ни другого нет, поэтому редактор отдельный.
+function editHundredItem(id){
+  const t = sections.list100.find(x => x.id === id);
+  if(!t) return;
+  openTextModal({
+    title: 'Пункт списка',
+    value: t.text,
+    note: t.note || '',
+    withNote: true,
+    cats: HUNDRED_CATS,
+    cat: t.cat || 'other',
+    onSave: (text, note, cat)=>{
+      t.text = text;
+      t.cat = cat || 'other';
+      if(note) t.note = note; else delete t.note;
+      saveSection('list100');
+      renderGoalDetail();
+    },
+    onDelete: ()=>deleteTask(id)
   });
 }
 
@@ -2635,12 +2906,20 @@ function openGoalModal(id){
   lastFocused = document.activeElement;
   const g = id ? goalById(id) : null;
   goalDraft = g
-    ? {id: g.id, name: g.name, icon: g.icon || '🎯', color: g.color || COLOR_POOL[0]}
-    : {id: null, name: '', icon: '🎯', color: COLOR_POOL[sections.goals.length % COLOR_POOL.length]};
+    ? {id: g.id, name: g.name, icon: g.icon || '🎯', color: g.color || COLOR_POOL[0],
+       due: g.due || '', habitIds: (g.habitIds || []).slice(), archived: !!g.archived}
+    : {id: null, name: '', icon: '🎯', color: COLOR_POOL[sections.goals.length % COLOR_POOL.length],
+       due: '', habitIds: [], archived: false};
 
   document.getElementById('goal-modal-title').textContent = g ? 'Изменить цель' : 'Новая цель';
   document.getElementById('goal-name').value = goalDraft.name;
+  document.getElementById('goal-due').value = goalDraft.due;
   document.getElementById('goal-icon-btn').textContent = goalDraft.icon;
+
+  const archBtn = document.getElementById('goal-archive-btn');
+  archBtn.style.display = g ? '' : 'none';
+  archBtn.textContent = goalDraft.archived ? 'Вернуть из архива' : 'В архив';
+  renderGoalHabits();
   document.getElementById('goal-colors').innerHTML = COLOR_POOL.map(c=>
     '<button class="color-dot" style="background:' + c + '"' +
     ' aria-pressed="' + (c === goalDraft.color ? 'true' : 'false') + '"' +
@@ -2677,6 +2956,56 @@ function openGoalEmoji(btn){
   openEmojiPicker(-1, btn);
 }
 
+// Привычки, привязанные к цели. Это и есть связка двух разделов: цель
+// перестаёт быть списком задач и начинает показывать, живёт ли она.
+function renderGoalHabits(){
+  const box = document.getElementById('goal-habits');
+  const list = activeHabits();
+  if(!list.length){
+    box.innerHTML = '<div class="hint">Сначала добавьте привычки в разделе Tracker.</div>';
+    return;
+  }
+  box.innerHTML = list.map(h=>
+    '<button type="button" class="cat-chip"' +
+      ' aria-pressed="' + (goalDraft.habitIds.indexOf(h.id) !== -1 ? 'true' : 'false') + '"' +
+      ' onclick="toggleGoalHabit(\'' + esc(h.id).replace(/'/g, '') + '\')">' +
+      esc(h.icon || '•') + ' ' + esc(h.name) + '</button>').join('');
+}
+
+function toggleGoalHabit(id){
+  if(!goalDraft) return;
+  const i = goalDraft.habitIds.indexOf(id);
+  if(i === -1) goalDraft.habitIds.push(id); else goalDraft.habitIds.splice(i, 1);
+  renderGoalHabits();
+}
+
+function clearGoalDue(){
+  document.getElementById('goal-due').value = '';
+}
+
+// Архивирование прямо из модалки: цель, которую закрыли, не нужно удалять —
+// её приятно видеть в списке завершённых.
+function toggleGoalArchive(){
+  if(!goalDraft || !goalDraft.id) return;
+  const g = goalById(goalDraft.id);
+  if(!g) return;
+  g.archived = !g.archived;
+  g.archivedAt = g.archived ? new Date().toISOString() : null;
+  saveSection('goals');
+  closeGoalModal();
+  setTab('focus');
+  toast(g.archived ? 'Цель в архиве: ' + g.name : 'Цель возвращена: ' + g.name);
+}
+
+function unarchiveGoal(id){
+  const g = goalById(id);
+  if(!g) return;
+  g.archived = false;
+  saveSection('goals');
+  renderFocus();
+  toast('Цель возвращена: ' + g.name);
+}
+
 function closeGoalModal(){
   document.getElementById('goal-modal').classList.remove('open');
   goalDraft = null;
@@ -2687,12 +3016,18 @@ function saveGoalModal(){
   const name = document.getElementById('goal-name').value.trim();
   if(!name){ toast('Название цели не может быть пустым', true); return; }
 
+  const due = document.getElementById('goal-due').value || '';
+
   if(goalDraft.id){
     const g = goalById(goalDraft.id);
-    if(g){ g.name = name; g.icon = goalDraft.icon; g.color = goalDraft.color; }
+    if(g){
+      g.name = name; g.icon = goalDraft.icon; g.color = goalDraft.color;
+      g.due = due; g.habitIds = goalDraft.habitIds.slice();
+    }
   } else {
     sections.goals.push({id: newId('g'), name: name, icon: goalDraft.icon,
-                         color: goalDraft.color, tasks: []});
+                         color: goalDraft.color, tasks: [], due: due,
+                         habitIds: goalDraft.habitIds.slice()});
   }
   saveSection('goals');
   closeGoalModal();
@@ -2735,14 +3070,40 @@ function credoOfDay(){
   return list[seed % list.length];
 }
 
+// Как принцип держался последние семь дней: по дню на точку. Без такой
+// строки принцип остаётся декларацией — видно только сегодняшнюю галочку.
+function credoWeek(c){
+  const days = [];
+  for(let i = 6; i >= 0; i--){
+    const d = new Date(ty, tm, td - i);
+    days.push({
+      d: d.getDate(),
+      dow: DOW_SHORT[d.getDay()],
+      done: !!data[credoKey(c, d)],
+      note: (c.notes && c.notes[credoKey(c, d)]) || ''
+    });
+  }
+  return days;
+}
+
 function renderCredo(){
   const box = document.getElementById('credo-list');
   const today = credoOfDay();
+
+  // Итог недели по всем принципам: одна честная цифра вместо ощущений.
+  const list = sections.credo;
+  let kept = 0, total = 0;
+  list.forEach(c=>{
+    credoWeek(c).forEach(day=>{ total++; if(day.done) kept++; });
+  });
+  const weekPct = total ? Math.round(kept / total * 100) : 0;
 
   document.getElementById('credo-today').innerHTML = today
     ? '<div class="credo-today">' +
         '<div class="ct-label">Принцип дня</div>' +
         '<div class="ct-text">' + esc(today.text) + '</div>' +
+        (total ? '<div class="ct-week">За неделю принципы удержаны на <b>' + weekPct + '%</b>' +
+                 ' · ' + kept + ' из ' + total + '</div>' : '') +
       '</div>'
     : '';
 
@@ -2757,19 +3118,66 @@ function renderCredo(){
     const k = credoKey(c);
     const done = !!data[k];
     const streak = getStreak({id: c.id, name: c.text, color: '#000'});
+    const week = credoWeek(c);
+    const todayNote = (c.notes && c.notes[k]) || '';
+
+    // Привычка, поддерживающая принцип: «Сначала неприятное» ↔ «Лягушка».
+    const habit = c.habitId ? activeHabits().find(h => h.id === c.habitId) : null;
+
     return '<div class="credo-row">' +
       '<button type="button" class="task-check" role="checkbox"' +
         ' aria-checked="' + (done ? 'true' : 'false') + '"' +
         ' aria-label="Следовал сегодня: ' + esc(c.text) + '"' +
         ' data-act="toggle-credo" data-id="' + esc(c.id) + '">' + (done ? '✓' : '') + '</button>' +
-      '<div style="flex:1">' +
+      '<div style="flex:1;min-width:0">' +
         '<div class="cr-text" data-act="edit-credo" data-id="' + esc(c.id) + '">' + esc(c.text) + '</div>' +
+
+        '<div class="cr-week" aria-label="Последние семь дней">' +
+          week.map(d => '<span class="cw-day' + (d.done ? ' on' : '') + '"' +
+            ' title="' + d.d + ' ' + d.dow + (d.note ? ': ' + esc(d.note) : '') + '">' +
+            '<i></i><em>' + d.dow.slice(0, 1) + '</em></span>').join('') +
+        '</div>' +
+
         (streak >= 2
           ? '<div class="cr-streak">🔥 ' + streak + ' ' + plural(streak, 'день', 'дня', 'дней') + ' подряд</div>'
           : '') +
+        (habit
+          ? '<div class="cr-habit">🔗 ' + esc(habit.icon || '•') + ' ' + esc(habit.name) +
+            ' · ' + getMonthPct(habit) + '% за месяц</div>'
+          : '') +
+        (todayNote
+          ? '<div class="cr-note" data-act="note-credo" data-id="' + esc(c.id) + '">✎ ' +
+            esc(todayNote) + '</div>'
+          : '<button class="cr-note-btn" data-act="note-credo" data-id="' + esc(c.id) + '">' +
+            (done ? '✎ заметка за сегодня' : '✎ почему не вышло') + '</button>') +
       '</div>' +
     '</div>';
   }).join('');
+}
+
+// Заметка за сегодня: «почему не вышло» или «как удалось». Хранится внутри
+// самого принципа по ключу дня — отдельная таблица ради строчки текста
+// была бы лишней.
+function noteCredo(id){
+  const c = sections.credo.find(x => x.id === id);
+  if(!c) return;
+  const k = credoKey(c);
+  openTextModal({
+    title: 'Заметка за сегодня',
+    placeholder: 'Что помешало или что помогло',
+    value: (c.notes && c.notes[k]) || '',
+    onSave: text=>{
+      c.notes = c.notes || {};
+      c.notes[k] = text;
+      saveSection('credo');
+      renderCredo();
+    },
+    onDelete: (c.notes && c.notes[k]) ? ()=>{
+      delete c.notes[k];
+      saveSection('credo');
+      renderCredo();
+    } : null
+  });
 }
 
 function toggleCredo(id){
@@ -2783,12 +3191,23 @@ function toggleCredo(id){
   if(on && !REDUCED_MOTION) launchConfetti(false);
 }
 
+// Список привычек как «категории»: так принцип связывается с привычкой
+// в том же окне, где его пишут.
+function habitChoices(){
+  return [{id:'', icon:'∅', name:'Без привычки'}].concat(
+    activeHabits().map(h => ({id: h.id, icon: h.icon || '•', name: h.name})));
+}
+
 function openCredoModal(){
   openTextModal({
     title: 'Новый принцип',
     placeholder: 'Например: «Сначала делаю самое неприятное»',
-    onSave: text=>{
-      sections.credo.push({id: newId('credo'), text: text});
+    cats: habitChoices(),
+    cat: '',
+    onSave: (text, extra, habitId)=>{
+      const c = {id: newId('credo'), text: text};
+      if(habitId) c.habitId = habitId;
+      sections.credo.push(c);
       saveSection('credo');
       renderCredo();
     }
@@ -2801,7 +3220,14 @@ function editCredo(id){
   openTextModal({
     title: 'Изменить принцип',
     value: c.text,
-    onSave: text=>{ c.text = text; saveSection('credo'); renderCredo(); },
+    cats: habitChoices(),
+    cat: c.habitId || '',
+    onSave: (text, extra, habitId)=>{
+      c.text = text;
+      if(habitId) c.habitId = habitId; else delete c.habitId;
+      saveSection('credo');
+      renderCredo();
+    },
     onDelete: ()=>{
       const i = sections.credo.findIndex(x => x.id === id);
       const removed = sections.credo.splice(i, 1)[0];
@@ -2906,9 +3332,21 @@ function openTextModal(opts){
   input.value = opts.value || '';
   input.placeholder = opts.placeholder || '';
 
+  // Категории (пункты списка ста) и вторая строка (автор цитаты, заметка
+  // к пункту) — одни и те же поля, включаются по надобности.
+  const cats = document.getElementById('text-modal-cats');
+  if(opts.cats){
+    textModalState.cat = opts.cat || opts.cats[opts.cats.length - 1].id;
+    cats.style.display = '';
+    renderTextModalCats();
+  } else {
+    cats.style.display = 'none';
+  }
+
   const extra = document.getElementById('text-modal-extra');
-  extra.style.display = opts.withAuthor ? '' : 'none';
-  extra.value = opts.author || '';
+  extra.style.display = (opts.withAuthor || opts.withNote) ? '' : 'none';
+  extra.placeholder = opts.withNote ? 'Заметка: где, с кем, как это было' : 'Автор';
+  extra.value = opts.author || opts.note || '';
 
   document.getElementById('text-modal-delete').style.display = opts.onDelete ? '' : 'none';
 
@@ -2925,14 +3363,30 @@ function closeTextModal(){
   if(lastFocused && lastFocused.focus) lastFocused.focus();
 }
 
+function renderTextModalCats(){
+  const opts = textModalState;
+  document.getElementById('text-modal-cats').innerHTML = opts.cats.map(c=>
+    '<button type="button" class="cat-chip"' +
+    ' aria-pressed="' + (c.id === opts.cat ? 'true' : 'false') + '"' +
+    ' onclick="pickTextModalCat(\'' + c.id + '\')">' +
+    esc(c.icon) + ' ' + esc(c.name) + '</button>').join('');
+}
+
+function pickTextModalCat(id){
+  if(!textModalState) return;
+  textModalState.cat = id;
+  renderTextModalCats();
+}
+
 function saveTextModal(){
   if(!textModalState) return;
   const text = document.getElementById('text-modal-input').value.trim();
   if(!text){ toast('Текст не может быть пустым', true); return; }
-  const author = document.getElementById('text-modal-extra').value.trim();
+  const extra = document.getElementById('text-modal-extra').value.trim();
   const cb = textModalState.onSave;
+  const cat = textModalState.cat;
   closeTextModal();
-  if(cb) cb(text, author);
+  if(cb) cb(text, extra, cat);
 }
 
 function deleteFromTextModal(){
@@ -3114,14 +3568,41 @@ function renderMoney(){
   const daysPassed = isCurrent ? td : new Date(y, m + 1, 0).getDate();
   const perDay = daysPassed ? Math.round(expense / daysPassed) : 0;
 
-  stats.innerHTML = [
-    {num: fmtMoney(income), label: 'Доходы'},
-    {num: fmtMoney(expense), label: 'Расходы'},
-    {num: fmtMoney(balance), label: 'Остаток'},
-    {num: fmtMoney(perDay), label: 'В день'}
-  ].map(s => '<div class="stat"><div class="stat-num" style="font-size:16px">' + s.num +
-             '</div><div class="stat-label">' + s.label + '</div></div>').join('');
+  // Сравнение с прошлым месяцем: абсолютная сумма ничего не говорит, пока
+  // не с чем сравнить.
+  const prev = monthOf(moneyOffset - 1);
+  const prevMonth = txs.filter(t => txInMonth(t, prev.y, prev.m));
+  const prevIncome = prevMonth.filter(t => t.kind === 'income').reduce((s, t) => s + t.amount, 0);
+  const prevExpense = prevMonth.filter(t => t.kind === 'expense').reduce((s, t) => s + t.amount, 0);
 
+  // Для текущего месяца честно сравниваем равные отрезки: с 1-го по то же
+  // число прошлого месяца, иначе «меньше» получается просто потому, что
+  // месяц ещё не кончился.
+  const prevSameSpan = isCurrent
+    ? prevMonth.filter(t => t.kind === 'expense' &&
+        parseInt(String(t.ts).slice(8, 10), 10) <= td)
+        .reduce((s, t) => s + t.amount, 0)
+    : prevExpense;
+
+  const diff = (now, was)=>{
+    if(!was) return '';
+    const pct = Math.round((now - was) / was * 100);
+    if(Math.abs(pct) < 3) return '<span class="delta same">≈ как в прошлом</span>';
+    return '<span class="delta ' + (pct > 0 ? 'up' : 'down') + '">' +
+           (pct > 0 ? '↑' : '↓') + ' ' + Math.abs(pct) + '%</span>';
+  };
+
+  stats.innerHTML = [
+    {num: fmtMoney(income), label: 'Доходы', delta: diff(income, prevIncome)},
+    {num: fmtMoney(expense), label: 'Расходы', delta: diff(expense, prevSameSpan)},
+    {num: fmtMoney(balance), label: 'Остаток', delta: ''},
+    {num: fmtMoney(perDay), label: 'В день', delta: ''}
+  ].map(s => '<div class="stat"><div class="stat-num" style="font-size:16px">' + s.num +
+             '</div><div class="stat-label">' + s.label + '</div>' +
+             (s.delta ? '<div class="stat-delta">' + s.delta + '</div>' : '') +
+             '</div>').join('');
+
+  document.getElementById('money-budgets').innerHTML = budgetsHtml();
   charts.innerHTML = expense || income ? (catChartHtml(month) + monthsChartHtml()) : '';
 
   if(!month.length){
@@ -3206,6 +3687,292 @@ function monthsChartHtml(){
       '<span><i style="background:var(--accent)"></i>доходы</span>' +
       '<span><i style="background:var(--text3)"></i>расходы</span>' +
     '</div></div>';
+}
+
+/* ═══════════════ ДЕНЬГИ: бюджеты, повторы, импорт ═══════════════ */
+
+function budgetFor(catId){
+  const b = sections.budgets.find(x => x && x.cat === catId);
+  return b ? b.limit : 0;
+}
+
+// Сколько потрачено по категории в показанном месяце.
+function spentByCat(catId){
+  const {y, m} = monthOf(moneyOffset);
+  return txs.filter(t => t.kind === 'expense' && t.category === catId && txInMonth(t, y, m))
+            .reduce((s, t) => s + t.amount, 0);
+}
+
+// Блок бюджетов: показываем только те категории, где лимит задан, и только
+// если по ним уже есть траты либо лимит вот-вот кончится.
+function budgetsHtml(){
+  const withLimit = sections.budgets.filter(b => b && b.limit > 0);
+  if(!withLimit.length) return '';
+
+  const rows = withLimit.map(b=>{
+    const c = catById('expense', b.cat);
+    const spent = spentByCat(b.cat);
+    const pct = Math.min(200, Math.round(spent / b.limit * 100));
+    const state = pct >= 100 ? 'over' : pct >= 80 ? 'warn' : 'ok';
+    return '<div class="cat-bar budget-bar ' + state + '">' +
+      '<span class="cb-ico">' + esc(c.icon) + '</span>' +
+      '<span class="cb-name">' + esc(c.name) + '</span>' +
+      '<span class="cb-track"><span class="cb-fill" style="width:' +
+        Math.min(100, pct) + '%"></span></span>' +
+      // В бюджете копейки только мешают: важен порядок, а не точность.
+      '<span class="cb-sum">' + fmtMoney(Math.round(spent / 100) * 100) +
+        ' / ' + fmtMoney(b.limit) + '</span>' +
+    '</div>';
+  }).join('');
+
+  const over = withLimit.filter(b => spentByCat(b.cat) >= b.limit).length;
+  return '<div class="chart-card"><h3>Бюджеты' +
+    (over ? ' · превышено: ' + over : '') + '</h3>' + rows + '</div>';
+}
+
+// ── Повторяющиеся операции ───────────────────────────────────────────────
+function openRulesModal(){
+  lastFocused = document.activeElement;
+  renderRules();
+  const m = document.getElementById('rules-modal');
+  m.classList.add('open');
+  m.setAttribute('aria-modal','true');
+  m.setAttribute('role','dialog');
+}
+
+function closeRulesModal(){
+  document.getElementById('rules-modal').classList.remove('open');
+  if(lastFocused && lastFocused.focus) lastFocused.focus();
+}
+
+function renderRules(){
+  const box = document.getElementById('rules-list');
+  const {y, m} = monthOf(moneyOffset);
+
+  if(!sections.money_rules.length){
+    box.innerHTML = '<div class="empty-section" style="padding:20px 10px">' +
+      '<div class="empty-emoji">↻</div>' +
+      '<p>Пока пусто. Кнопка ниже превратит операции показанного месяца ' +
+      'в повторяющиеся — потом их можно будет добавлять одним нажатием.</p></div>';
+    return;
+  }
+
+  box.innerHTML = sections.money_rules.map(r=>{
+    const c = catById(r.kind, r.category);
+    // Уже добавлено в этот месяц? Тогда повторно не предлагаем.
+    const already = txs.some(t => t.ruleId === r.id && txInMonth(t, y, m));
+    return '<div class="rule-row">' +
+      '<span class="m-cat">' + esc(c.icon) + '</span>' +
+      '<span class="m-mid">' +
+        '<span class="m-title">' + esc(r.note || c.name) + '</span>' +
+        '<span class="m-note">' + esc(c.name) + ' · ' + r.day + ' число</span>' +
+      '</span>' +
+      '<span class="m-sum ' + r.kind + '">' + (r.kind === 'income' ? '+' : '−') +
+        fmtMoney(r.amount) + '</span>' +
+      (already
+        ? '<span class="rule-done">✓</span>'
+        : '<button class="btn btn-secondary arch-btn" data-act="apply-rule" data-id="' +
+          esc(r.id) + '">Добавить</button>') +
+      '<button class="task-del" data-act="del-rule" data-id="' + esc(r.id) + '"' +
+        ' aria-label="Удалить правило">✕</button>' +
+    '</div>';
+  }).join('') +
+  (sections.money_rules.some(r => !txs.some(t => t.ruleId === r.id && txInMonth(t, y, m)))
+    ? '<button class="btn btn-primary" style="width:100%;margin-top:12px"' +
+      ' data-act="apply-all-rules">Добавить все за этот месяц</button>'
+    : '');
+}
+
+// Правила проще всего собрать из уже введённых операций месяца: человек
+// один раз ввёл аренду — дальше она повторяется сама.
+function addRuleFromCurrent(){
+  const {y, m} = monthOf(moneyOffset);
+  const month = txs.filter(t => txInMonth(t, y, m) && !t.ruleId);
+  if(!month.length){ toast('В этом месяце нет операций для повтора', true); return; }
+
+  let added = 0;
+  month.forEach(t=>{
+    const dup = sections.money_rules.some(r =>
+      r.kind === t.kind && r.category === t.category && r.amount === t.amount);
+    if(dup) return;
+    sections.money_rules.push({
+      id: newId('r'), kind: t.kind, amount: t.amount, category: t.category,
+      note: t.note || '', day: parseInt(String(t.ts).slice(8, 10), 10) || 1
+    });
+    added++;
+  });
+
+  if(!added){ toast('Все операции месяца уже есть в списке повторов'); return; }
+  saveSection('money_rules');
+  renderRules();
+  toast('Добавлено правил: ' + added);
+}
+
+async function applyRule(id){
+  const r = sections.money_rules.find(x => x.id === id);
+  if(!r) return;
+  const {y, m} = monthOf(moneyOffset);
+  const day = Math.min(r.day || 1, new Date(y, m + 1, 0).getDate());
+
+  const row = {
+    id: newId('tx'), ts: isoDate(new Date(y, m, day)), amount: r.amount,
+    kind: r.kind, category: r.category, note: r.note || '', ruleId: r.id
+  };
+  txs.unshift(row);
+  txs.sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
+  renderRules();
+  renderMoney();
+  await pushTx(row);
+}
+
+async function applyAllRules(){
+  const {y, m} = monthOf(moneyOffset);
+  const pending = sections.money_rules.filter(r =>
+    !txs.some(t => t.ruleId === r.id && txInMonth(t, y, m)));
+  for(const r of pending) await applyRule(r.id);
+  toast('Добавлено операций: ' + pending.length);
+}
+
+function deleteRule(id){
+  const i = sections.money_rules.findIndex(r => r.id === id);
+  if(i === -1) return;
+  const removed = sections.money_rules.splice(i, 1)[0];
+  saveSection('money_rules');
+  renderRules();
+  toast('Правило удалено', false, ()=>{
+    sections.money_rules.splice(i, 0, removed);
+    saveSection('money_rules');
+    renderRules();
+  });
+}
+
+// ── Бюджеты ──────────────────────────────────────────────────────────────
+function openBudgetModal(){
+  lastFocused = document.activeElement;
+  document.getElementById('budget-list').innerHTML = MONEY_CATS.expense.map(c=>{
+    const limit = budgetFor(c.id);
+    return '<div class="budget-edit">' +
+      '<span class="cb-ico">' + esc(c.icon) + '</span>' +
+      '<span class="cb-name">' + esc(c.name) + '</span>' +
+      '<input class="add-input budget-input" data-cat="' + c.id + '" type="text"' +
+        ' inputmode="decimal" placeholder="без лимита" value="' +
+        (limit ? (limit / 100) : '') + '">' +
+    '</div>';
+  }).join('');
+
+  const m = document.getElementById('budget-modal');
+  m.classList.add('open');
+  m.setAttribute('aria-modal','true');
+  m.setAttribute('role','dialog');
+}
+
+function closeBudgetModal(){
+  document.getElementById('budget-modal').classList.remove('open');
+  if(lastFocused && lastFocused.focus) lastFocused.focus();
+}
+
+function saveBudgets(){
+  const next = [];
+  document.querySelectorAll('#budget-list .budget-input').forEach(inp=>{
+    const limit = parseAmount(inp.value);
+    if(limit > 0) next.push({cat: inp.dataset.cat, limit: limit});
+  });
+  sections.budgets = next;
+  saveSection('budgets');
+  closeBudgetModal();
+  renderMoney();
+  toast(next.length ? 'Бюджеты сохранены' : 'Бюджеты сняты');
+}
+
+// ── Импорт выписки CSV ───────────────────────────────────────────────────
+// Банки выгружают по-разному, поэтому колонки ищем по названиям, а разделитель
+// определяем по первой строке. Всё, что не разобралось, пропускаем и
+// показываем в итоге — молча терять строки выписки нельзя.
+function parseCsv(text){
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if(!lines.length) return {rows: [], skipped: 0};
+
+  const sep = (lines[0].match(/;/g) || []).length > (lines[0].match(/,/g) || []).length ? ';' : ',';
+  const split = line=>{
+    const out = []; let cur = '', q = false;
+    for(let i = 0; i < line.length; i++){
+      const ch = line[i];
+      if(ch === '"'){ q = !q; continue; }
+      if(ch === sep && !q){ out.push(cur); cur = ''; continue; }
+      cur += ch;
+    }
+    out.push(cur);
+    return out.map(s => s.trim());
+  };
+
+  const head = split(lines[0]).map(h => h.toLowerCase());
+  const find = names => head.findIndex(h => names.some(n => h.indexOf(n) !== -1));
+  const iDate = find(['дата', 'date']);
+  const iSum  = find(['сумма', 'amount', 'оборот']);
+  const iNote = find(['описание', 'назначение', 'коммент', 'description', 'категория']);
+
+  if(iDate === -1 || iSum === -1) return {rows: [], skipped: lines.length - 1, noHead: true};
+
+  const rows = [];
+  let skipped = 0;
+  for(let i = 1; i < lines.length; i++){
+    const cols = split(lines[i]);
+    const rawDate = cols[iDate] || '';
+    const rawSum = (cols[iSum] || '').replace(/\s/g, '').replace(',', '.');
+
+    // Дата: 2026-09-06, 06.09.2026 или 06/09/2026.
+    let ts = null;
+    let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(rawDate);
+    if(m) ts = m[1] + '-' + m[2] + '-' + m[3];
+    if(!ts){
+      m = /^(\d{2})[.\/](\d{2})[.\/](\d{4})/.exec(rawDate);
+      if(m) ts = m[3] + '-' + m[2] + '-' + m[1];
+    }
+
+    const val = parseFloat(rawSum);
+    if(!ts || isNaN(val) || val === 0){ skipped++; continue; }
+
+    rows.push({
+      id: newId('tx'),
+      ts: ts,
+      amount: Math.round(Math.abs(val) * 100),
+      kind: val < 0 ? 'expense' : 'income',
+      category: val < 0 ? 'other' : 'other_in',
+      note: (iNote !== -1 ? (cols[iNote] || '') : '').slice(0, 80)
+    });
+  }
+  return {rows, skipped};
+}
+
+function importCsv(e){
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if(!file) return;
+  if(moneyTableMissing){ toast('Сначала создайте таблицу transactions', true); return; }
+
+  const reader = new FileReader();
+  reader.onload = async ev=>{
+    const {rows, skipped, noHead} = parseCsv(String(ev.target.result || ''));
+    if(noHead){
+      toast('В файле не нашлись колонки с датой и суммой', true);
+      return;
+    }
+    if(!rows.length){ toast('Не удалось разобрать ни одной строки', true); return; }
+
+    if(!confirm('Загрузить ' + rows.length + ' операций' +
+                (skipped ? ' (пропущено строк: ' + skipped + ')' : '') +
+                '?\n\nОни добавятся к текущим, категория — «Другое».')) return;
+
+    rows.forEach(r=>{ txs.push(r); });
+    txs.sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
+    renderMoney();
+
+    for(const r of rows) await pushTx(r, {silent: true});
+    toast('Загружено операций: ' + rows.length +
+          (skipped ? ', пропущено: ' + skipped : ''));
+  };
+  reader.onerror = ()=>toast('Не удалось прочитать файл', true);
+  reader.readAsText(file, 'utf-8');
 }
 
 // ── Модалка операции ──────────────────────────────────────────────────────
@@ -3378,7 +4145,8 @@ async function deleteTxFromModal(){
   if(t==='dark'){isDark=true;document.documentElement.setAttribute('data-theme','dark');document.getElementById('theme-btn').textContent='☀️';}
   // Выбранный вид уважаем и на телефоне; неделя — только если выбора не было.
   const savedView = localStorage.getItem('view');
-  view = (savedView === 'week' || savedView === 'month' || savedView === 'year')
+  view = (savedView === 'today' || savedView === 'week' ||
+          savedView === 'month' || savedView === 'year')
     ? savedView
     : 'week';
   let stored = null;
@@ -3400,7 +4168,7 @@ async function deleteTxFromModal(){
     if(event === 'SIGNED_OUT'){
       currentUser = null;
       data = {};
-      sections = {goals: [], list100: [], credo: [], quotes: []};
+      sections = {goals: [], list100: [], credo: [], quotes: [], money_rules: [], budgets: []};
       txs = [];
       moneyLoaded = false;
       showScreen('auth');
@@ -3418,7 +4186,7 @@ async function deleteTxFromModal(){
         localStorage.removeItem('customHabits');
         // Разделы и операции тоже принадлежат прежнему аккаунту: без сброса
         // новый пользователь видел бы чужие цели и траты до конца загрузки.
-        sections = {goals: [], list100: [], credo: [], quotes: []};
+        sections = {goals: [], list100: [], credo: [], quotes: [], money_rules: [], budgets: []};
         txs = [];
         moneyLoaded = false;
       }

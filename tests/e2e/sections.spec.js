@@ -285,6 +285,171 @@ test('Money: пустая сумма не сохраняется', async ({page}
   await expect(page.locator('#tx-modal')).not.toHaveClass(/open/);
 });
 
+test('Focus: срок цели и привязка привычек', async ({page}) => {
+  await openTab(page, 'focus');
+
+  await page.locator('.goal-card').first().click();
+  await page.locator('[data-act="edit-goal"]').click();
+  await expect(page.locator('#goal-modal')).toHaveClass(/open/);
+
+  // Срок: ставим завтрашний день и проверяем подпись «остался 1 день».
+  const tomorrow = await page.evaluate(() => {
+    const d = new Date(ty, tm, td + 1);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+           '-' + String(d.getDate()).padStart(2, '0');
+  });
+  await page.locator('#goal-due').fill(tomorrow);
+
+  // И привязываем первую привычку.
+  await page.locator('#goal-habits .cat-chip').first().click();
+  await page.locator('#goal-save-btn').click();
+
+  // Проверяем именно экран цели: в скрытом списке лежат такие же подписи.
+  await expect(page.locator('#panel-goal .goal-sub')).toContainText(/остал/);
+  await expect(page.locator('.goal-habits-row')).toBeVisible();
+  expect(await page.evaluate(() => sections.goals[0].habitIds.length)).toBe(1);
+  expect(await page.evaluate(() => sections.goals[0].due)).toBe(tomorrow);
+
+  // И на карточке в списке срок тоже виден.
+  await page.locator('.back-btn').click();
+  await expect(page.locator('#panel-focus .goal-card').first()).toContainText(/остал/);
+});
+
+test('Focus: цель уходит в архив и возвращается', async ({page}) => {
+  await openTab(page, 'focus');
+  const before = await page.locator('.goal-card').count();
+
+  await page.locator('.goal-card').first().click();
+  await page.locator('[data-act="edit-goal"]').click();
+  await page.locator('#goal-archive-btn').click();
+
+  await expect(page.locator('.goal-card')).toHaveCount(before - 1);
+  await expect(page.locator('.archive-block')).toBeVisible();
+
+  // Архив свёрнут — сначала раскрываем.
+  await page.locator('.archive-block summary').click();
+  await page.locator('[data-act="unarchive-goal"]').first().click();
+  await expect(page.locator('.goal-card')).toHaveCount(before);
+});
+
+test('100: категория, заметка и дата выполнения', async ({page}) => {
+  await openTab(page, 'focus');
+  await page.locator('.hundred-card').click();
+
+  // Новый пункт с категорией и заметкой.
+  await page.getByRole('button', {name: '+ Новый пункт'}).click();
+  await page.locator('#text-modal-input').fill('Сплавиться по реке');
+  await page.locator('#text-modal-extra').fill('с братом, весной');
+  await page.locator('#text-modal-cats .cat-chip').first().click();   // Путешествия
+  await page.locator('#text-modal-save').click();
+
+  const row = page.locator('.task-row').filter({hasText: 'Сплавиться по реке'});
+  await expect(row).toBeVisible();
+  await expect(row.locator('.task-meta')).toContainText('с братом');
+
+  // Отметка проставляет дату.
+  await row.locator('.task-check').click();
+  await expect(row.locator('.task-meta')).toContainText('сегодня');
+
+  // Фильтр по категории оставляет только её пункты.
+  await page.locator('[data-act="filter-100"]').nth(1).click();
+  const texts = await page.locator('.task-text').allInnerTexts();
+  expect(texts.some(t => t.includes('Сплавиться'))).toBeTruthy();
+});
+
+test('Credo: неделя, связка с привычкой и заметка', async ({page}) => {
+  await openTab(page, 'credo');
+
+  // Семь дней истории у каждого принципа.
+  await expect(page.locator('.credo-row').first().locator('.cw-day')).toHaveCount(7);
+  await expect(page.locator('.credo-today .ct-week')).toContainText('%');
+
+  // Привязка привычки к принципу.
+  await page.locator('.cr-text').first().click();
+  await expect(page.locator('#text-modal')).toHaveClass(/open/);
+  await page.locator('#text-modal-cats .cat-chip').nth(1).click();
+  await page.locator('#text-modal-save').click();
+  await expect(page.locator('.cr-habit').first()).toBeVisible();
+
+  // Заметка за сегодня.
+  await page.locator('[data-act="note-credo"]').first().click();
+  await page.locator('#text-modal-input').fill('День был длинный');
+  await page.locator('#text-modal-save').click();
+  await expect(page.locator('.cr-note').first()).toContainText('День был длинный');
+});
+
+test('Tracker: вид «Сегодня» показывает только сегодняшнее', async ({page}) => {
+  await openDemo(page);
+  await page.locator('#btn-today').click();
+
+  await expect(page.locator('#btn-today')).toHaveClass(/active/);
+  await expect(page.locator('#nav-title')).toHaveText('Сегодня');
+  await expect(page.locator('.today-row').first()).toBeVisible();
+  // Листать по дням тут нечего.
+  await expect(page.locator('#btn-prev')).toBeHidden();
+
+  // Отметка прямо отсюда меняет данные и переносит строку в «Сделано».
+  const check = page.locator('.today-row:not(.done) .today-check').first();
+  const before = await page.evaluate(() => Object.keys(data).length);
+  await check.click();
+  expect(await page.evaluate(() => Object.keys(data).length)).toBe(before + 1);
+  await expect(page.locator('.today-sep').first()).toBeVisible();
+
+  expect(await page.evaluate(() => localStorage.getItem('view'))).toBe('today');
+});
+
+test('Money: бюджеты и сравнение с прошлым месяцем', async ({page}) => {
+  await openTab(page, 'money');
+
+  // В демо бюджеты заданы — блок виден и показывает лимиты.
+  await expect(page.locator('#money-budgets .budget-bar').first()).toBeVisible();
+  await expect(page.locator('#money-stats .delta').first()).toBeVisible();
+
+  // Правка лимита через модалку.
+  await page.getByRole('button', {name: /Бюджеты/}).click();
+  await expect(page.locator('#budget-modal')).toHaveClass(/open/);
+  await page.locator('.budget-input').first().fill('30000');
+  await page.getByRole('button', {name: 'Сохранить'}).click();
+  expect(await page.evaluate(() => sections.budgets[0].limit)).toBe(3000000);
+});
+
+test('Money: повторяющаяся операция добавляется одним нажатием', async ({page}) => {
+  await openTab(page, 'money');
+
+  await page.getByRole('button', {name: /Повторяющиеся/}).click();
+  await expect(page.locator('#rules-modal')).toHaveClass(/open/);
+  await expect(page.locator('.rule-row')).toHaveCount(3);
+
+  const before = await page.evaluate(() => txs.length);
+  await page.locator('[data-act="apply-rule"]').first().click();
+  expect(await page.evaluate(() => txs.length)).toBe(before + 1);
+
+  // Повторно ту же операцию не предлагаем.
+  await expect(page.locator('.rule-done').first()).toBeVisible();
+});
+
+test('Money: импорт CSV разбирает дату, сумму и знак', async ({page}) => {
+  await openTab(page, 'money');
+  page.on('dialog', d => d.accept());
+
+  const before = await page.evaluate(() => txs.length);
+  await page.locator('#csv-file').setInputFiles({
+    name: 'vypiska.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      'Дата;Сумма;Описание\n' +
+      '06.09.2026;-1 250,50;Кофейня\n' +
+      '05.09.2026;40000;Оплата клиента\n' +
+      'кривая строка;;\n', 'utf-8')
+  });
+
+  await expect.poll(() => page.evaluate(() => txs.length)).toBe(before + 2);
+  const imported = await page.evaluate(() => txs.filter(t => t.note === 'Кофейня')[0]);
+  expect(imported.amount).toBe(125050);
+  expect(imported.kind).toBe('expense');
+  expect(imported.ts).toBe('2026-09-06');
+});
+
 test('разделы не ходят в сеть в демо-режиме', async ({page, sbRequests}) => {
   await openDemo(page);
 

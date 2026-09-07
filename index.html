@@ -140,6 +140,7 @@
       <span class="nav-title" id="nav-title"></span>
       <button class="nav-btn" id="btn-next" onclick="navigate(1)" aria-label="Вперёд">→</button>
       <div class="view-toggle" role="tablist" aria-label="Период">
+        <button class="view-btn" id="btn-today" onclick="setView('today')" role="tab">Сег.</button>
         <button class="view-btn" id="btn-week" onclick="setView('week')" role="tab">Нед.</button>
         <button class="view-btn" id="btn-month" onclick="setView('month')" role="tab">Мес.</button>
         <button class="view-btn" id="btn-year" onclick="setView('year')" role="tab">Год</button>
@@ -154,6 +155,7 @@
   <section class="tab-panel" id="panel-focus" role="tabpanel" aria-labelledby="tab-focus" hidden>
     <div id="hundred-card"></div>
     <div class="goals-grid" id="goals-grid"></div>
+    <div id="goals-archive"></div>
     <div class="section-actions">
       <button class="btn btn-primary" id="add-goal-btn" onclick="openGoalModal()">+ Новая цель</button>
     </div>
@@ -177,6 +179,16 @@
       <button class="btn btn-expense" onclick="openTxModal('expense')">− Расход</button>
       <button class="btn btn-income" onclick="openTxModal('income')">+ Доход</button>
     </div>
+    <div class="money-tools">
+      <button class="link-btn" onclick="openRulesModal()">↻ Повторяющиеся</button>
+      <button class="link-btn" onclick="openBudgetModal()">◎ Бюджеты</button>
+      <label class="link-btn" style="cursor:pointer">
+        ⬆ Импорт CSV
+        <input type="file" id="csv-file" accept=".csv,text/csv" style="display:none"
+               onchange="importCsv(event)">
+      </label>
+    </div>
+    <div id="money-budgets"></div>
     <div id="money-charts"></div>
     <div id="money-list"></div>
   </section>
@@ -237,7 +249,18 @@
       <input class="add-input" id="goal-name" placeholder="Название цели" maxlength="40">
     </div>
     <div class="color-row" id="goal-colors"></div>
+
+    <label class="field-label" for="goal-due">Срок (необязательно)</label>
+    <div class="field-row">
+      <input class="add-input" id="goal-due" type="date">
+      <button class="btn btn-secondary" onclick="clearGoalDue()">Убрать</button>
+    </div>
+
+    <div class="field-label">Привычки этой цели</div>
+    <div class="habit-pick" id="goal-habits"></div>
+
     <div class="modal-footer">
+      <button class="btn btn-danger" id="goal-archive-btn" onclick="toggleGoalArchive()" style="display:none">В архив</button>
       <button class="btn btn-secondary" onclick="closeGoalModal()">Отмена</button>
       <button class="btn btn-primary" id="goal-save-btn" onclick="saveGoalModal()">Сохранить</button>
     </div>
@@ -265,11 +288,40 @@
   </div>
 </div>
 
+<!-- ── ПОВТОРЯЮЩИЕСЯ ОПЕРАЦИИ ──────────────────────────────────────────── -->
+<div class="modal-overlay" id="rules-modal">
+  <div class="modal">
+    <h2>Повторяющиеся операции</h2>
+    <p class="hint">Аренда, подписки, зарплата. В начале месяца одна кнопка
+      добавляет их все — вводить руками каждый раз не нужно.</p>
+    <div id="rules-list"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeRulesModal()">Закрыть</button>
+      <button class="btn btn-primary" onclick="addRuleFromCurrent()">+ Из этого месяца</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── БЮДЖЕТЫ ПО КАТЕГОРИЯМ ───────────────────────────────────────────── -->
+<div class="modal-overlay" id="budget-modal">
+  <div class="modal">
+    <h2>Бюджеты на месяц</h2>
+    <p class="hint">Лимит на категорию. Когда съедено больше 80%, категория
+      подсвечивается в списке над графиками.</p>
+    <div id="budget-list"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeBudgetModal()">Отмена</button>
+      <button class="btn btn-primary" onclick="saveBudgets()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── УНИВЕРСАЛЬНАЯ МОДАЛКА ВВОДА (кредо, цитаты, пункты списка) ───────── -->
 <div class="modal-overlay" id="text-modal">
   <div class="modal">
     <h2 id="text-modal-title">Добавить</h2>
     <textarea class="add-input text-area" id="text-modal-input" rows="3" maxlength="280"></textarea>
+    <div class="cat-row" id="text-modal-cats" style="display:none"></div>
     <input class="add-input" id="text-modal-extra" placeholder="Автор" maxlength="60" style="display:none">
     <div class="modal-footer">
       <button class="btn btn-danger" id="text-modal-delete" onclick="deleteFromTextModal()" style="display:none">Удалить</button>
