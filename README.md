@@ -381,6 +381,9 @@ curl -s -H "apikey: $SUPABASE_ANON_KEY" -H "Authorization: Bearer $SUPABASE_ANON
      "$SUPABASE_URL/rest/v1/transactions?select=*&limit=5"
 ```
 
+Таблица создана 8 сентября 2026, RLS проверен: анонимный запрос возвращает
+пустой массив.
+
 Категории операций заданы в коде (`MONEY_CATS` в `app.js`), валюта одна —
 рубль. Счета и бюджеты по категориям намеренно не делались: без них ввод
 операции остаётся в два касания.
