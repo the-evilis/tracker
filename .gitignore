@@ -12,3 +12,6 @@ test-results/
 playwright-report/
 blob-report/
 .playwright-mcp/
+
+# Личные разрешения Claude Code для этой машины (доступ к серверу, git, npm).
+.claude/settings.local.json
