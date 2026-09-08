@@ -398,6 +398,90 @@ test('Tracker: вид «Сегодня» показывает только се�
   expect(await page.evaluate(() => localStorage.getItem('view'))).toBe('today');
 });
 
+test('Сегодня: принцип дня, срок цели и деньги на одном экране', async ({page, pageErrors}) => {
+  await openDemo(page);
+  await page.locator('#btn-today').click();
+
+  // Метрики дня вместо общего процента.
+  await expect(page.locator('#stats-row').getByText('Сегодня')).toBeVisible();
+  await expect(page.locator('#stats-row').getByText('Хороших дней')).toBeVisible();
+
+  // Принцип дня — с отметкой прямо здесь. Ищем внутри экрана дня: такие же
+  // кнопки есть и в разделе Credo, он просто скрыт.
+  const credoCheck = page.locator('#panel-tracker [data-act="toggle-credo"]');
+  await expect(credoCheck).toBeVisible();
+  const was = (await credoCheck.getAttribute('aria-checked')) === 'true';
+  await credoCheck.click();
+  await expect(page.locator('#panel-tracker [data-act="toggle-credo"]'))
+    .toHaveAttribute('aria-checked', was ? 'false' : 'true');
+
+  // Деньги за сегодня и поле быстрого ввода.
+  await expect(page.locator('.today-money')).toBeVisible();
+  await expect(page.locator('#quick-tx')).toBeVisible();
+
+  expect(pageErrors).toEqual([]);
+});
+
+test('Сегодня: быстрый ввод понимает «850 кафе»', async ({page}) => {
+  await openDemo(page);
+  await page.locator('#btn-today').click();
+
+  const before = await page.evaluate(() => txs.length);
+  await page.locator('#quick-tx').fill('850 кафе');
+  await page.locator('#quick-tx').press('Enter');
+
+  expect(await page.evaluate(() => txs.length)).toBe(before + 1);
+  const added = await page.evaluate(() => txs[0]);
+  expect(added.amount).toBe(85000);
+  expect(added.kind).toBe('expense');
+  expect(added.note).toBe('кафе');
+
+  // Знак «+» делает операцию доходом.
+  await page.locator('#quick-tx').fill('+50000 клиент');
+  await page.locator('#quick-tx').press('Enter');
+  const income = await page.evaluate(() => txs[0]);
+  expect(income.kind).toBe('income');
+  expect(income.amount).toBe(5000000);
+
+  // Категория подхватывается из прошлой операции с тем же словом.
+  await page.evaluate(() => {
+    txs.unshift({id: 'seed-1', ts: txs[0].ts, amount: 30000, kind: 'expense',
+                 category: 'transport', note: 'такси домой'});
+  });
+  await page.locator('#quick-tx').fill('420 такси');
+  await page.locator('#quick-tx').press('Enter');
+  const guessed = await page.evaluate(() => txs.find(t => t.note === 'такси'));
+  expect(guessed.category).toBe('transport');
+});
+
+test('Сегодня: строка мусора не создаёт операцию', async ({page}) => {
+  await openDemo(page);
+  await page.locator('#btn-today').click();
+
+  const before = await page.evaluate(() => txs.length);
+  await page.locator('#quick-tx').fill('просто текст');
+  await page.locator('#quick-tx').press('Enter');
+
+  expect(await page.evaluate(() => txs.length)).toBe(before);
+  await expect(page.locator('#toast')).toContainText(/Не понял сумму/);
+});
+
+test('Money: повторить вчера копирует операции на сегодня', async ({page}) => {
+  await openTab(page, 'money');
+
+  const yesterdayCount = await page.evaluate(() => {
+    const d = new Date(ty, tm, td - 1);
+    const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+                '-' + String(d.getDate()).padStart(2, '0');
+    return txs.filter(t => t.ts === iso).length;
+  });
+  const before = await page.evaluate(() => txs.length);
+
+  await page.getByRole('button', {name: /Повторить вчера/}).click();
+
+  expect(await page.evaluate(() => txs.length)).toBe(before + yesterdayCount);
+});
+
 test('Money: бюджеты и сравнение с прошлым месяцем', async ({page}) => {
   await openTab(page, 'money');
 

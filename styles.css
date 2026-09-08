@@ -432,11 +432,13 @@ body.magic-cursor *, body.magic-cursor{cursor:url("data:image/svg+xml;utf8,<svg 
   margin-bottom:8px;box-shadow:var(--shadow);cursor:pointer;width:100%;
   font-family:var(--sans);text-align:left}
 .money-line .m-cat{font-size:19px;width:26px;text-align:center;flex-shrink:0}
-.money-line .m-mid{flex:1;min-width:0}
-.money-line .m-title{font-size:14px;color:var(--text);white-space:nowrap;
-  overflow:hidden;text-overflow:ellipsis}
-.money-line .m-note{font-size:11px;color:var(--text3);margin-top:2px;
+/* display:block обязателен: это span-ы, и без него название категории и
+   заметка слипались в одну строку («ЗарплатаОсновной доход»). */
+.money-line .m-mid, .rule-row .m-mid{flex:1;min-width:0;display:block}
+.money-line .m-title, .rule-row .m-title{display:block;font-size:14px;color:var(--text);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.money-line .m-note, .rule-row .m-note{display:block;font-size:11px;color:var(--text3);
+  margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .money-line .m-sum{font-size:14px;font-weight:500;white-space:nowrap}
 .m-sum.income{color:var(--accent)}
 .m-sum.expense{color:var(--text)}
@@ -523,6 +525,26 @@ body.magic-cursor *, body.magic-cursor{cursor:url("data:image/svg+xml;utf8,<svg 
 .today-check[aria-checked="true"]{background:var(--habit,var(--accent));
   border-color:var(--habit,var(--accent))}
 .today-check:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ── Экран дня: цель со сроком, деньги, быстрый ввод ── */
+.today-goal{display:flex;align-items:center;gap:12px;width:100%;margin-bottom:14px;
+  padding:12px 14px;border-radius:var(--radius);border:1px solid var(--border);
+  background:var(--surface);box-shadow:var(--shadow);cursor:pointer;
+  font-family:var(--sans);text-align:left;border-left:3px solid var(--accent)}
+.today-goal.overdue{border-left-color:#dc2626}
+.today-goal .tg-ico{font-size:20px}
+.today-goal .tg-mid{flex:1;min-width:0}
+.today-goal .tg-mid b{display:block;font-size:14px;font-weight:500;color:var(--text)}
+.today-goal .tg-sub{font-size:11px;color:var(--text3)}
+.today-goal.overdue .tg-sub{color:#dc2626}
+.today-goal .tg-arrow{color:var(--text3);font-size:20px}
+.today-money{background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:14px;box-shadow:var(--shadow)}
+.tm-sum{font-family:var(--serif);font-size:20px;color:var(--text);margin-bottom:10px}
+.tm-count{font-family:var(--sans);font-size:12px;color:var(--text3)}
+.quick-row{display:flex;gap:8px;margin-top:12px}
+.quick-input{margin:0;flex:1}
+.quick-hint{font-size:11px;color:var(--text3);margin-top:8px}
 
 /* ── Деньги: инструменты, бюджеты, сравнение ── */
 .money-tools{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;justify-content:center}

@@ -71,7 +71,10 @@ function seedDemoSections(){
         {id:'demo-t6', text:'Сайт студии', done:false},
         {id:'demo-t7', text:'Прайс на пакеты работ', done:false}
       ]},
-      {id:'demo-g3', name:'Английский', icon:'🌍', color:'#BA7517', tasks:[
+      // У одной цели намеренно стоит близкий срок: так на экране дня видно,
+      // как выглядит напоминание о горящей цели.
+      {id:'demo-g3', name:'Английский', icon:'🌍', color:'#BA7517',
+       due: isoDate(new Date(ty, tm, td + 4)), habitIds:['legacy-4'], tasks:[
         {id:'demo-t8', text:'Смотреть без субтитров', done:false},
         {id:'demo-t9', text:'Созвон с носителем раз в неделю', done:true}
       ]},
@@ -999,7 +1002,62 @@ function checkAllDone(days){
 
 // Статистика с явной базой: «47 из 63» вместо «47», имя привычки-рекордсмена
 // и понятная подпись периода — раньше числа не говорили, от чего считаются.
+// «Хороший день» — не идеальный. Закрыть всё до единой привычки удаётся
+// редко, и метрика «дней закрыто: 0 из 7» каждый вечер сообщает человеку,
+// что он провалился. Поэтому день считается хорошим, если сделано не
+// меньше двух третей запланированного на него.
+const GOOD_DAY_RATIO = 0.67;
+
+function dayScore(day){
+  const due = activeHabits().filter(h => isPlannedDay(h, day));
+  if(!due.length) return null;                       // плановых дел не было
+  const done = due.filter(h => data[dkey(day.y, day.m, day.d, h.id)]).length;
+  return {done, total: due.length, good: done / due.length >= GOOD_DAY_RATIO};
+}
+
+// Скользящее окно вместо «с начала месяца»: важно, как идут дела сейчас,
+// а не насколько испорчено начало месяца.
+function goodDaysWindow(n){
+  let good = 0, counted = 0;
+  for(let i = 0; i < n; i++){
+    const d = new Date(ty, tm, td - i);
+    const s = dayScore(dayObj(d));
+    if(!s) continue;
+    counted++;
+    if(s.good) good++;
+  }
+  return {good, counted};
+}
+
+// Метрики вида «Сегодня» отвечают на один вопрос: что сейчас и как идёт
+// эта неделя. Общий процент и длинные серии сюда намеренно не попадают.
+function renderTodayStats(day){
+  const s = dayScore(day) || {done: 0, total: 0};
+  const w = goodDaysWindow(7);
+  const marks7 = (()=>{
+    let n = 0;
+    for(let i = 0; i < 7; i++){
+      const d = new Date(ty, tm, td - i);
+      activeHabits().forEach(h=>{ if(data[dkey(d.getFullYear(), d.getMonth(), d.getDate(), h.id)]) n++; });
+    }
+    return n;
+  })();
+
+  const cards = [
+    {num: s.done + '<span class="stat-of"> из ' + s.total + '</span>', label: 'Сегодня'},
+    {num: w.good + '<span class="stat-of"> из ' + w.counted + '</span>', label: 'Хороших дней'},
+    {num: marks7 + '', label: 'Отметок за 7 дней'},
+    {num: (s.total - s.done) + '', label: s.total - s.done ? 'Осталось' : 'Всё закрыто'}
+  ];
+
+  document.getElementById('stats-row').innerHTML = cards.map(c=>
+    '<div class="stat"><div class="stat-num">' + c.num + '</div>' +
+    '<div class="stat-label">' + c.label + '</div></div>').join('');
+}
+
 function renderStats(days){
+  if(view === 'today'){ renderTodayStats(days[0]); return; }
+
   const list = activeHabits();
   let done = 0, planned = 0, fullDays = 0, countedDays = 0;
 
@@ -1007,12 +1065,14 @@ function renderStats(days){
     const due = list.filter(h => isPlannedDay(h, day));
     if(!due.length) return;
     countedDays++;
-    let all = true;
+    let dayDone = 0;
     due.forEach(h=>{
       planned++;
-      if(data[dkey(day.y, day.m, day.d, h.id)]) done++; else all = false;
+      if(data[dkey(day.y, day.m, day.d, h.id)]){ done++; dayDone++; }
     });
-    if(all) fullDays++;
+    // Считаем хорошие дни, а не идеальные: требовать все привычки до
+    // единой — верный способ показывать ноль каждую неделю.
+    if(dayDone / due.length >= GOOD_DAY_RATIO) fullDays++;
   });
 
   let best = 0, bestName = '';
@@ -1031,7 +1091,7 @@ function renderStats(days){
     {num: pct + '%',                                                 label: 'Процент'},
     {num: best + (bestLabel ? '<span class="stat-of"> ' + bestLabel + '</span>' : ''),
      label: best ? esc(trimName(bestName)) : 'Серия'},
-    {num: fullDays + '<span class="stat-of"> из ' + countedDays + '</span>', label: 'Дней закрыто'}
+    {num: fullDays + '<span class="stat-of"> из ' + countedDays + '</span>', label: 'Хороших дней'}
   ];
   document.getElementById('stats-row').innerHTML = cards.map(s=>
     '<div class="stat"><div class="stat-num">'+s.num+'</div><div class="stat-label">'+s.label+'</div></div>'
@@ -1232,27 +1292,91 @@ function renderToday(day){
   const due = activeHabits().filter(h => isPlannedDay(h, day));
   const rest = activeHabits().filter(h => !isPlannedDay(h, day));
 
-  if(!due.length){
-    document.getElementById('habits-list').innerHTML =
-      '<div class="empty"><div class="empty-emoji">🌤</div>' +
+  const habitsHtml = due.length
+    ? (()=>{
+        const undone = due.filter(h => !data[dkey(day.y, day.m, day.d, h.id)]);
+        const done = due.filter(h => data[dkey(day.y, day.m, day.d, h.id)]);
+        return '<div class="today-head">' +
+            (undone.length
+              ? '<b>Осталось ' + undone.length + '</b> из ' + due.length
+              : '<b>Всё закрыто</b> · ' + due.length + ' из ' + due.length) +
+          '</div>' +
+          todayRows(undone, day) +
+          (done.length ? '<div class="today-sep">Сделано</div>' + todayRows(done, day) : '');
+      })()
+    : '<div class="empty"><div class="empty-emoji">🌤</div>' +
       '<h3>На сегодня ничего не запланировано</h3>' +
-      '<p>По графику сегодня свободный день. Можно отметить что-то из внепланового ниже.</p></div>' +
-      (rest.length ? todayRows(rest, day, true) : '');
-    return;
-  }
-
-  const undone = due.filter(h => !data[dkey(day.y, day.m, day.d, h.id)]);
-  const done = due.filter(h => data[dkey(day.y, day.m, day.d, h.id)]);
+      '<p>По графику сегодня свободный день.</p></div>';
 
   document.getElementById('habits-list').innerHTML =
-    '<div class="today-head">' +
-      (undone.length
-        ? '<b>Осталось ' + undone.length + '</b> из ' + due.length
-        : '<b>Всё закрыто</b> · ' + due.length + ' из ' + due.length) +
-    '</div>' +
-    todayRows(undone, day) +
-    (done.length ? '<div class="today-sep">Сделано</div>' + todayRows(done, day) : '') +
-    (rest.length ? '<div class="today-sep">Не по графику</div>' + todayRows(rest, day, true) : '');
+    dueGoalHtml() +
+    habitsHtml +
+    (rest.length ? '<div class="today-sep">Не по графику</div>' + todayRows(rest, day, true) : '') +
+    credoTodayHtml() +
+    moneyTodayHtml();
+}
+
+// Ближайший горящий срок из Focus. Показываем только то, что действительно
+// требует внимания: просрочено или осталось меньше недели.
+function dueGoalHtml(){
+  const soon = activeGoals()
+    .filter(g => g.due && daysLeft(g.due) !== null && daysLeft(g.due) <= 7)
+    .sort((a, b) => daysLeft(a.due) - daysLeft(b.due))[0];
+  if(!soon) return '';
+
+  const overdue = daysLeft(soon.due) < 0;
+  return '<button class="today-goal' + (overdue ? ' overdue' : '') + '"' +
+    ' data-act="open-goal" data-id="' + esc(soon.id) + '">' +
+    '<span class="tg-ico">' + esc(soon.icon || '🎯') + '</span>' +
+    '<span class="tg-mid"><b>' + esc(soon.name) + '</b>' +
+    '<span class="tg-sub">' + esc(dueLabel(soon.due)) + '</span></span>' +
+    '<span class="tg-arrow">›</span>' +
+  '</button>';
+}
+
+// Принцип дня прямо на экране дня: заходить ради одной галочки в Credo
+// человек не станет.
+function credoTodayHtml(){
+  const c = credoOfDay();
+  if(!c) return '';
+  const k = credoKey(c);
+  const done = !!data[k];
+  return '<div class="today-sep">Принцип дня</div>' +
+    '<div class="today-row' + (done ? ' done' : '') + '">' +
+      '<div class="habit-icon" style="--habit:var(--accent);--habit-bg:var(--surface2)">🧭</div>' +
+      '<div class="today-mid">' +
+        '<div class="habit-name">' + esc(c.text) + '</div>' +
+        '<div class="today-meta">' + (done ? 'сегодня удержан' : 'отметьте вечером') + '</div>' +
+      '</div>' +
+      '<button type="button" class="today-check" role="checkbox"' +
+        ' aria-checked="' + (done ? 'true' : 'false') + '"' +
+        ' aria-label="Следовал принципу сегодня"' +
+        ' data-act="toggle-credo" data-id="' + esc(c.id) + '">' + (done ? '✓' : '') + '</button>' +
+    '</div>';
+}
+
+// Деньги за сегодня и строка быстрого ввода: записывать трату нужно в тот
+// же момент, когда о ней вспомнил, а не «когда дойду до раздела».
+function moneyTodayHtml(){
+  if(moneyTableMissing) return '';
+  const iso = isoDate(new Date(ty, tm, td));
+  const todayTx = txs.filter(t => t.ts === iso);
+  const spent = todayTx.filter(t => t.kind === 'expense').reduce((s, t) => s + t.amount, 0);
+
+  return '<div class="today-sep">Деньги за сегодня</div>' +
+    '<div class="today-money">' +
+      '<div class="tm-sum">' + (spent ? fmtMoney(spent) : 'трат нет') +
+        (todayTx.length ? '<span class="tm-count"> · ' + todayTx.length + ' ' +
+          plural(todayTx.length, 'операция', 'операции', 'операций') + '</span>' : '') +
+      '</div>' +
+      '<div class="quick-row">' +
+        '<input class="add-input quick-input" id="quick-tx" placeholder="850 кафе"' +
+          ' autocomplete="off" inputmode="text"' +
+          ' onkeydown="if(event.key===\'Enter\')quickAddTx()">' +
+        '<button class="btn btn-primary" onclick="quickAddTx()">Записать</button>' +
+      '</div>' +
+      '<div class="quick-hint" id="quick-hint">Сумма и слово: «850 кафе», «-180 кофе», «+50000 клиент»</div>' +
+    '</div>';
 }
 
 function todayRows(list, day, offplan){
@@ -3187,7 +3311,9 @@ function toggleCredo(id){
   const on = !data[k];
   if(on) data[k] = true; else delete data[k];
   saveEntry(k, on);
-  renderCredo();
+  // Принцип отмечают из двух мест — из раздела и с экрана дня, поэтому
+  // перерисовываем тот экран, который открыт сейчас.
+  renderCurrent();
   if(on && !REDUCED_MOTION) launchConfetti(false);
 }
 
@@ -3973,6 +4099,118 @@ function importCsv(e){
   };
   reader.onerror = ()=>toast('Не удалось прочитать файл', true);
   reader.readAsText(file, 'utf-8');
+}
+
+/* ═══════════════ БЫСТРЫЙ ВВОД ОПЕРАЦИИ ═══════════════ */
+// «850 кафе» → расход 850 ₽ в категорию, которой это слово уже помечалось.
+// Смысл в том, чтобы запись занимала секунды: полноценная форма с выбором
+// категории через месяц перестаёт открываться вовсе.
+function parseQuick(raw){
+  const s = String(raw || '').trim();
+  if(!s) return null;
+
+  // Сумма — первое число в строке; знак решает, доход это или расход.
+  const m = /(^|\s)([+-]?)(\d[\d\s]*(?:[.,]\d{1,2})?)/.exec(s);
+  if(!m) return null;
+
+  const amount = parseAmount(m[3]);
+  if(!amount) return null;
+
+  const explicitIncome = m[2] === '+';
+  const rest = (s.slice(0, m.index) + ' ' + s.slice(m.index + m[0].length)).trim();
+
+  return {amount, note: rest, income: explicitIncome};
+}
+
+// Категория берётся из прошлых операций с тем же словом: человек один раз
+// записал «кофе» как «Еда» — дальше приложение помнит это само.
+function guessCategory(note, kind){
+  const word = String(note || '').toLowerCase().trim();
+  if(word){
+    const prev = txs.filter(t => t.kind === kind && t.note &&
+                                t.note.toLowerCase().indexOf(word) !== -1);
+    if(prev.length) return prev[0].category;
+
+    // Не нашли по всей заметке — пробуем по первому слову.
+    const first = word.split(/\s+/)[0];
+    if(first.length >= 3){
+      const byFirst = txs.filter(t => t.kind === kind && t.note &&
+                                     t.note.toLowerCase().indexOf(first) !== -1);
+      if(byFirst.length) return byFirst[0].category;
+    }
+  }
+  return kind === 'income' ? 'other_in' : 'other';
+}
+
+// Поле быстрого ввода есть и на экране дня, и в разделе денег.
+function quickAddTxFrom(id){ return quickAddTx(id); }
+
+async function quickAddTx(inputId){
+  const input = document.getElementById(inputId || 'quick-tx');
+  if(!input) return;
+
+  if(moneyTableMissing){ toast('Сначала создайте таблицу transactions', true); return; }
+
+  const parsed = parseQuick(input.value);
+  if(!parsed){
+    toast('Не понял сумму. Например: «850 кафе»', true);
+    input.focus();
+    return;
+  }
+
+  const kind = parsed.income ? 'income' : 'expense';
+  const row = {
+    id: newId('tx'),
+    ts: isoDate(new Date(ty, tm, td)),
+    amount: parsed.amount,
+    kind: kind,
+    category: guessCategory(parsed.note, kind),
+    note: parsed.note.slice(0, 80)
+  };
+
+  txs.unshift(row);
+  txs.sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
+  input.value = '';
+
+  const cat = catById(kind, row.category);
+  // Категорию угадали — говорим какую, чтобы ошибку было видно сразу.
+  toast((kind === 'income' ? '+' : '−') + fmtMoney(row.amount) + ' · ' + cat.name, false);
+  renderCurrent();
+  await pushTx(row);
+}
+
+// «Повторить вчера»: регулярные траты почти всегда повторяются с теми же
+// суммами, и вводить их заново — лишняя работа.
+async function repeatYesterday(){
+  const iso = isoDate(new Date(ty, tm, td - 1));
+  const yesterday = txs.filter(t => t.ts === iso);
+  if(!yesterday.length){ toast('Вчера операций не было', true); return; }
+
+  const today = isoDate(new Date(ty, tm, td));
+  const copies = yesterday.map(t => Object.assign({}, t, {id: newId('tx'), ts: today}));
+  copies.forEach(c => txs.unshift(c));
+  txs.sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
+  renderCurrent();
+
+  for(const c of copies) await pushTx(c, {silent: true});
+  toast('Скопировано операций: ' + copies.length, false, async ()=>{
+    copies.forEach(c=>{
+      const i = txs.findIndex(t => t.id === c.id);
+      if(i !== -1) txs.splice(i, 1);
+    });
+    renderCurrent();
+    for(const c of copies) await removeTx(c.id);
+  });
+}
+
+async function removeTx(id){
+  if(isDemoMode || !currentUser) return;
+  try{
+    const res = await sbFetchWithTimeout(()=>
+      sb.from('transactions').delete().eq('user_id', currentUser.id).eq('id', id));
+    if(res.error) throw new Error(res.error.message);
+    txQueueDrop(id);
+  }catch(e){ /* останется на сервере; список поправится при следующей загрузке */ }
 }
 
 // ── Модалка операции ──────────────────────────────────────────────────────

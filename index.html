@@ -179,7 +179,13 @@
       <button class="btn btn-expense" onclick="openTxModal('expense')">− Расход</button>
       <button class="btn btn-income" onclick="openTxModal('income')">+ Доход</button>
     </div>
+    <div class="quick-row">
+      <input class="add-input quick-input" id="quick-tx-money" placeholder="850 кафе"
+             autocomplete="off" onkeydown="if(event.key==='Enter')quickAddTxFrom('quick-tx-money')">
+      <button class="btn btn-primary" onclick="quickAddTxFrom('quick-tx-money')">Записать</button>
+    </div>
     <div class="money-tools">
+      <button class="link-btn" onclick="repeatYesterday()">⧉ Повторить вчера</button>
       <button class="link-btn" onclick="openRulesModal()">↻ Повторяющиеся</button>
       <button class="link-btn" onclick="openBudgetModal()">◎ Бюджеты</button>
       <label class="link-btn" style="cursor:pointer">

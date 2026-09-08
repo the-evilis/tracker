@@ -34,7 +34,9 @@ test('демо-режим открывается и показывает ист�
   await expect(stats).toHaveCount(4);
   await expect(stats.nth(0)).toContainText(/из/);
   await expect(stats.nth(1)).toContainText(/%/);
-  await expect(page.locator('#stats-row').getByText('Дней закрыто')).toBeVisible();
+  // «Хороших дней» вместо прежнего «Дней закрыто»: требовать все привычки
+  // до единой — верный способ показывать ноль каждую неделю.
+  await expect(page.locator('#stats-row').getByText('Хороших дней')).toBeVisible();
 
   // Процент выполнения в демо заведомо больше нуля.
   const pct = await stats.nth(1).locator('.stat-num').innerText();
