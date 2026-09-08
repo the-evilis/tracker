@@ -29,6 +29,7 @@ function leaveDemo(){
   marksValues = {};
   HABITS = cloneDefaults();
   sections = {goals: [], list100: [], credo: [], quotes: [], money_rules: [], budgets: []};
+  tombs = {goals: {}, list100: {}, credo: {}, quotes: {}, money_rules: {}, budgets: {}};
   txs = [];
   document.getElementById('demo-banner').style.display = 'none';
   showScreen('auth');
@@ -382,7 +383,7 @@ function guessEmoji(name) {
 function buildEmojiPicker(){
   const p = document.getElementById('emoji-picker');
   p.innerHTML = EMOJI_POOL.map(e =>
-    '<button class="ep-emoji" onclick="pickEmoji(\''+e+'\')" title="'+e+'">'+e+'</button>'
+    '<button class="ep-emoji" data-act="pick-emoji" data-arg="'+e+'" title="'+e+'">'+e+'</button>'
   ).join('');
 }
 
@@ -868,10 +869,47 @@ function habitSchedule(h){
   return {type:'daily'};
 }
 
+// История графиков привычки. Раньше проценты и серии за прошлое считались
+// по текущему расписанию: сменил «каждый день» на «3 раза в неделю» — и вся
+// история задним числом становилась другой. Теперь каждая смена графика
+// запоминается с датой, а прошлые дни считаются по тому графику, который
+// действовал тогда.
+//
+// Формат: h.schedHistory = [{from:'ГГГГ-ММ-ДД', schedule:{...}}, ...] по
+// возрастанию даты. Записи до первой даты считаются по h.schedule.
+function scheduleAt(h, day){
+  const hist = h && Array.isArray(h.schedHistory) ? h.schedHistory : null;
+  if(!hist || !hist.length) return habitSchedule(h);
+
+  const iso = day.y + '-' + String(day.m + 1).padStart(2, '0') + '-' +
+              String(day.d).padStart(2, '0');
+  let found = null;
+  for(let i = 0; i < hist.length; i++){
+    if(hist[i] && hist[i].from <= iso) found = hist[i]; else break;
+  }
+  return found ? habitSchedule({schedule: found.schedule}) : habitSchedule(h);
+}
+
+// Зафиксировать смену графика: вызывается при сохранении привычек, если
+// расписание действительно изменилось.
+function pushScheduleHistory(h, oldSchedule){
+  const today = ty + '-' + String(tm + 1).padStart(2, '0') + '-' + String(td).padStart(2, '0');
+  h.schedHistory = Array.isArray(h.schedHistory) ? h.schedHistory : [];
+
+  // Первая запись описывает то, что действовало ДО сегодняшнего дня.
+  if(!h.schedHistory.length){
+    h.schedHistory.push({from: '0000-00-00', schedule: oldSchedule || {type:'daily'}});
+  }
+  // Правка графика дважды за день не должна плодить записи.
+  const last = h.schedHistory[h.schedHistory.length - 1];
+  if(last && last.from === today) last.schedule = h.schedule || {type:'daily'};
+  else h.schedHistory.push({from: today, schedule: h.schedule || {type:'daily'}});
+}
+
 // Ждём ли мы отметку в этот день. Для «N раз в неделю» плановых дней нет —
 // подходит любой, поэтому такие дни не помечаем как внеплановые.
 function isPlannedDay(h, day){
-  const s = habitSchedule(h);
+  const s = scheduleAt(h, day);
   if(s.type === 'weekdays') return s.days.indexOf(day.date.getDay()) !== -1;
   return true;
 }
@@ -1272,7 +1310,7 @@ function render(){
         '<div class="empty-emoji">🌱</div>'+
         '<h3>Пока ни одной привычки</h3>'+
         '<p>Добавьте первую — начать лучше с одной-двух, чтобы они успели закрепиться.</p>'+
-        '<button class="btn btn-primary" onclick="openModal()">Добавить привычку</button>'+
+        '<button class="btn btn-primary" data-act="openModal">Добавить привычку</button>'+
       '</div>';
     return;
   }
@@ -1372,8 +1410,8 @@ function moneyTodayHtml(){
       '<div class="quick-row">' +
         '<input class="add-input quick-input" id="quick-tx" placeholder="850 кафе"' +
           ' autocomplete="off" inputmode="text"' +
-          ' onkeydown="if(event.key===\'Enter\')quickAddTx()">' +
-        '<button class="btn btn-primary" onclick="quickAddTx()">Записать</button>' +
+          ' data-enter="quick-tx">' +
+        '<button class="btn btn-primary" data-act="quickAddTx">Записать</button>' +
       '</div>' +
       '<div class="quick-hint" id="quick-hint">Сумма и слово: «850 кафе», «-180 кофе», «+50000 клиент»</div>' +
     '</div>';
@@ -1722,7 +1760,7 @@ function renderEditor(){
     const target = habitTarget(h);
 
     // Настройка графика: либо дни недели, либо «N раз в неделю».
-    let extra = '<select class="edit-select" onchange="setSchedType('+i+',this.value)" aria-label="Как часто">'+
+    let extra = '<select class="edit-select" data-change="sched-type" data-idx="'+i+'" aria-label="Как часто">'+
         '<option value="daily"'         +(s.type==='daily'?' selected':'')+         '>каждый день</option>'+
         '<option value="weekdays"'      +(s.type==='weekdays'?' selected':'')+      '>по дням недели</option>'+
         '<option value="times_per_week"'+(s.type==='times_per_week'?' selected':'')+'>раз в неделю</option>'+
@@ -1731,17 +1769,17 @@ function renderEditor(){
     if(s.type === 'weekdays'){
       extra += '<span class="dow-pick">' + [1,2,3,4,5,6,0].map(d=>
         '<button type="button" class="dow-btn'+(s.days.indexOf(d)!==-1?' on':'')+'"'+
-        ' onclick="toggleDow('+i+','+d+')" aria-pressed="'+(s.days.indexOf(d)!==-1?'true':'false')+'"'+
+        ' data-act="toggle-dow" data-idx="'+i+'" data-day="'+d+'" aria-pressed="'+(s.days.indexOf(d)!==-1?'true':'false')+'"'+
         ' aria-label="'+DOW_SHORT[d]+'">'+DOW_SHORT[d]+'</button>'
       ).join('') + '</span>';
     } else if(s.type === 'times_per_week'){
       extra += '<input class="edit-num" type="number" min="1" max="7" value="'+s.n+'"'+
-        ' onchange="setSchedTimes('+i+',this.value)" aria-label="Сколько раз в неделю">'+
+        ' data-change="sched-times" data-idx="'+i+'" aria-label="Сколько раз в неделю">'+
         '<span class="hint">раз в неделю</span>';
     }
 
     extra += '<input class="edit-num" type="number" min="0" max="999" value="'+(target||'')+'"'+
-      ' placeholder="цель" onchange="setTarget('+i+',this.value)" aria-label="Цель за день">'+
+      ' placeholder="цель" data-change="set-target" data-idx="'+i+'" aria-label="Цель за день">'+
       '<span class="hint">цель за день, если есть</span>';
 
     return '<div class="edit-row" draggable="true" data-idx="'+i+'" '+
@@ -1751,10 +1789,10 @@ function renderEditor(){
          'ondragend="dragEnd(event)" '+
          'ondragleave="dragLeave(event)">'+
       '<span class="drag-handle" title="Перетащи чтобы изменить порядок">⋮⋮</span>'+
-      '<button class="edit-icon-btn" onclick="openEmojiPicker('+i+',this)" title="Выбрать эмодзи" aria-label="Выбрать эмодзи">'+esc(h.icon)+'</button>'+
-      '<input class="edit-input" value="'+esc(h.name)+'" oninput="editBuffer['+i+'].name=this.value" maxlength="30" aria-label="Название привычки">'+
-      '<button class="arch-btn" onclick="archiveHabit('+i+')" title="Убрать в архив вместе с историей">В архив</button>'+
-      '<button class="del-btn" onclick="removeHabit('+i+')" title="Удалить" aria-label="Удалить привычку">✕</button>'+
+      '<button class="edit-icon-btn" data-act="emoji-open" data-idx="'+i+'" title="Выбрать эмодзи" aria-label="Выбрать эмодзи">'+esc(h.icon)+'</button>'+
+      '<input class="edit-input" value="'+esc(h.name)+'" data-input="habit-name" data-idx="'+i+'" maxlength="30" aria-label="Название привычки">'+
+      '<button class="arch-btn" data-act="archive-habit" data-idx="'+i+'" title="Убрать в архив вместе с историей">В архив</button>'+
+      '<button class="del-btn" data-act="remove-habit" data-idx="'+i+'" title="Удалить" aria-label="Удалить привычку">✕</button>'+
       '<div class="edit-extra">'+extra+'</div>'+
     '</div>';
   }).join('');
@@ -1808,7 +1846,7 @@ function renderArchive(){
       '<span>'+esc(h.icon)+'</span>'+
       '<span class="nm">'+esc(h.name)+'</span>'+
       '<span class="hint">'+n+' '+plural(n,'отметка','отметки','отметок')+'</span>'+
-      '<button class="arch-btn" onclick="unarchiveHabit('+i+')">Вернуть</button>'+
+      '<button class="arch-btn" data-act="unarchive-habit" data-idx="'+i+'">Вернуть</button>'+
     '</div>';
   }).join('');
 }
@@ -1961,7 +1999,21 @@ async function saveHabitsToServer(){
 }
 
 async function saveHabits(){
-  HABITS = editBuffer.map(cloneHabit);
+  // Смену графика фиксируем в истории привычки — иначе прошлые серии и
+  // проценты пересчитались бы по новому расписанию и история соврала бы.
+  const before = {};
+  HABITS.forEach(h=>{ before[h.id] = JSON.stringify(habitSchedule(h)); });
+
+  const next = editBuffer.map(cloneHabit);
+  next.forEach(h=>{
+    if(!h.id || !(h.id in before)) return;                 // новая привычка
+    const now = JSON.stringify(habitSchedule(h));
+    if(now === before[h.id]) return;                        // график не менялся
+    const old = HABITS.find(x => x.id === h.id);
+    pushScheduleHistory(h, old ? habitSchedule(old) : {type:'daily'});
+  });
+
+  HABITS = next;
   ensureHabitIds();
   localStorage.setItem('customHabits',JSON.stringify(HABITS));
   closeModal(); render();
@@ -2227,8 +2279,8 @@ function showCropUI(src){
       <div id="crop-box" style="position:absolute;border:2px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.5);cursor:move;aspect-ratio:1"></div>
     </div>
     <div style="display:flex;gap:12px">
-      <button onclick="document.getElementById('crop-overlay').remove()" style="padding:10px 24px;border-radius:10px;border:1px solid rgba(255,255,255,.3);background:none;color:#fff;cursor:pointer;font-family:var(--sans)">Отмена</button>
-      <button onclick="cropAndSave()" style="padding:10px 24px;border-radius:10px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-family:var(--sans);font-weight:500">Сохранить</button>
+      <button data-act="crop-cancel" style="padding:10px 24px;border-radius:10px;border:1px solid rgba(255,255,255,.3);background:none;color:#fff;cursor:pointer;font-family:var(--sans)">Отмена</button>
+      <button data-act="crop-save" style="padding:10px 24px;border-radius:10px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-family:var(--sans);font-weight:500">Сохранить</button>
     </div>`;
   document.body.appendChild(overlay);
 
@@ -2481,6 +2533,123 @@ function writeSectionLocal(key){
   try{ localStorage.setItem(sectionKey(key), JSON.stringify(sections[key])); }catch(e){}
 }
 
+/* ── СЛИЯНИЕ РАЗДЕЛОВ ПО ЭЛЕМЕНТАМ ────────────────────────────────────────
+   Раньше раздел уходил на сервер целым массивом, и правка с телефона
+   затирала правку с ноутбука: побеждал тот, кто сохранил последним.
+   Теперь у каждой записи есть отметка времени `u`, при загрузке списки
+   сливаются поэлементно, а удаления помнятся отдельно — иначе запись,
+   удалённая на одном устройстве, воскресала бы со второго.
+
+   Слияние работает на верхнем уровне списка. Задачи внутри цели правятся
+   вместе с самой целью: конфликт «двое одновременно правят одну цель с
+   разных устройств» для личного приложения не стоит усложнения. */
+
+// У бюджета нет id — его личность это категория.
+function itemKey(it){ return it && (it.id || it.cat); }
+
+// Удалённые записи: ключ → время удаления. Хранятся 90 дней, потом чистятся,
+// иначе список тумбстоунов растёт вечно.
+const TOMB_TTL = 90 * 86400000;
+let tombs = {goals: {}, list100: {}, credo: {}, quotes: {}, money_rules: {}, budgets: {}};
+
+function tombKey(){ return 'sec_tomb_' + ((currentUser && currentUser.id) || 'anon'); }
+
+function readTombs(){
+  try{
+    const v = JSON.parse(localStorage.getItem(tombKey()) || '{}');
+    SECTION_KEYS.forEach(k=>{ if(!v[k] || typeof v[k] !== 'object') v[k] = {}; });
+    return v;
+  }catch(e){
+    const empty = {};
+    SECTION_KEYS.forEach(k=>{ empty[k] = {}; });
+    return empty;
+  }
+}
+
+function writeTombs(){
+  const now = Date.now();
+  SECTION_KEYS.forEach(k=>{
+    Object.keys(tombs[k] || {}).forEach(id=>{
+      if(now - tombs[k][id] > TOMB_TTL) delete tombs[k][id];
+    });
+  });
+  try{ localStorage.setItem(tombKey(), JSON.stringify(tombs)); }catch(e){}
+}
+
+// Пометить запись удалённой (вызывается там же, где элемент убирают из списка).
+function markDeleted(key, id){
+  if(!id) return;
+  tombs[key] = tombs[key] || {};
+  tombs[key][id] = Date.now();
+  writeTombs();
+}
+
+// Отменили удаление — снимаем пометку, иначе запись исчезнет при следующей
+// загрузке уже с сервера.
+function unmarkDeleted(key, id){
+  if(tombs[key]) delete tombs[key][id];
+  writeTombs();
+}
+
+// Снимок последнего сохранённого состояния: по нему видно, какие записи
+// изменились, и только им проставляется новое время. Без снимка пришлось бы
+// вручную ставить отметку в полусотне мест, где список правится.
+const snapshots = {};
+
+function stampChanges(key){
+  const prev = snapshots[key] || {};
+  const next = {};
+  const now = Date.now();
+  (sections[key] || []).forEach(item=>{
+    const k = itemKey(item);
+    if(!k) return;
+    const clean = Object.assign({}, item);
+    delete clean.u;
+    const json = JSON.stringify(clean);
+    if(prev[k] !== json) item.u = now;
+    next[k] = json;
+  });
+  snapshots[key] = next;
+}
+
+function refreshSnapshot(key){
+  const map = {};
+  (sections[key] || []).forEach(item=>{
+    const k = itemKey(item);
+    if(!k) return;
+    const clean = Object.assign({}, item);
+    delete clean.u;
+    map[k] = JSON.stringify(clean);
+  });
+  snapshots[key] = map;
+}
+
+// Слияние локального списка с серверным: побеждает более свежая запись,
+// удалённые не воскресают.
+function mergeSection(key, serverItems, serverDel){
+  tombs[key] = Object.assign({}, tombs[key] || {}, serverDel || {});
+
+  const byKey = {};
+  (sections[key] || []).forEach(it=>{ const k = itemKey(it); if(k) byKey[k] = it; });
+
+  (serverItems || []).forEach(s=>{
+    const k = itemKey(s);
+    if(!k) return;
+    const local = byKey[k];
+    if(!local || (s.u || 0) > (local.u || 0)) byKey[k] = s;
+  });
+
+  sections[key] = Object.keys(byKey).map(k => byKey[k]).filter(it=>{
+    const t = tombs[key][itemKey(it)];
+    // Удаление старше последней правки — значит запись успели вернуть.
+    return !t || t < (it.u || 0);
+  });
+
+  writeTombs();
+  writeSectionLocal(key);
+  refreshSnapshot(key);
+}
+
 // Разделы, изменённые локально и ещё не ушедшие на сервер. Список живёт в
 // localStorage: без него неотправленная правка молча терялась при следующей
 // загрузке — серверная версия накатывалась поверх локальной.
@@ -2504,6 +2673,7 @@ function markDirty(key, on){
 // изменений, и каждое незачем отправлять отдельным запросом.
 const sectionTimers = {};
 function saveSection(key){
+  stampChanges(key);           // изменённым записям — новое время
   writeSectionLocal(key);
   if(!currentUser || isDemoMode) return;
   markDirty(key, true);
@@ -2514,9 +2684,12 @@ function saveSection(key){
 async function pushSection(key){
   if(!currentUser || isDemoMode) return;
   try{
+    // Формат 2: вместе со списком уходят удаления. Старые записи в базе —
+    // просто массив, он читается как формат 1.
+    const payload = JSON.stringify({v: 2, items: sections[key], del: tombs[key] || {}});
     const res = await sbFetchWithTimeout(()=>
       sb.from('user_settings').upsert(
-        {user_id: currentUser.id, key: key, value: JSON.stringify(sections[key]),
+        {user_id: currentUser.id, key: key, value: payload,
          updated_at: new Date().toISOString()},
         {onConflict:'user_id,key'}
       )
@@ -2542,10 +2715,10 @@ async function flushSections(){
 }
 
 async function loadSections(){
-  SECTION_KEYS.forEach(k=>{ sections[k] = readSectionLocal(k); });
+  SECTION_KEYS.forEach(k=>{ sections[k] = readSectionLocal(k); refreshSnapshot(k); });
+  tombs = readTombs();
   if(!currentUser || isDemoMode) return;
 
-  const dirty = readDirty();
   try{
     const res = await sbFetchWithTimeout(()=>
       sb.from('user_settings').select('key,value').eq('user_id', currentUser.id).in('key', SECTION_KEYS)
@@ -2553,12 +2726,16 @@ async function loadSections(){
     if(res.error) return;                       // остаются локальные данные
     (res.data || []).forEach(row=>{
       if(SECTION_KEYS.indexOf(row.key) === -1 || !row.value) return;
-      // Раздел с неотправленными правками серверной версией не затираем:
-      // локальная новее, её и нужно досылать.
-      if(dirty.indexOf(row.key) !== -1) return;
       try{
         const parsed = JSON.parse(row.value);
-        if(Array.isArray(parsed)){ sections[row.key] = parsed; writeSectionLocal(row.key); }
+        // Формат 1 — голый массив, формат 2 — {items, del}.
+        const items = Array.isArray(parsed) ? parsed
+                    : (parsed && Array.isArray(parsed.items) ? parsed.items : null);
+        if(!items) return;
+        const del = (parsed && parsed.del && typeof parsed.del === 'object') ? parsed.del : {};
+        // Сливаем всегда, даже если есть неотправленные правки: слияние
+        // поэлементное, локальное новее — оно и победит.
+        mergeSection(row.key, items, del);
       }catch(e){ /* битую запись игнорируем, локальная версия важнее */ }
     });
   }catch(e){ /* нет сети — работаем с локальными */ }
@@ -2607,11 +2784,133 @@ const SECTION_ACTIONS = {
   'del-rule':     el => deleteRule(el.dataset.id)
 };
 
+// Действия статической разметки. Раньше это были inline-onclick: они
+// требуют 'unsafe-inline' в CSP и ломаются при переходе на ES-модули, где
+// функции не попадают в window. Список намеренно явный — так data-act не
+// может вызвать произвольную функцию приложения.
+const STATIC_ACTIONS = {
+  // вход
+  switchAuthTab:      el => switchAuthTab(el.dataset.arg),
+  sendMagicLink:      () => sendMagicLink(),
+  signInWithGoogle:   () => signInWithGoogle(),
+  enterDemo:          () => enterDemo(),
+  leaveDemo:          () => leaveDemo(),
+
+  // шапка и меню пользователя
+  openModal:          () => openModal(),
+  closeModal:         () => closeModal(),
+  saveHabits:         () => saveHabits(),
+  addHabit:           () => addHabit(),
+  toggleSound:        () => toggleSound(),
+  toggleTheme:        () => toggleTheme(),
+  toggleUserMenu:     (el, e) => toggleUserMenu(e),
+  exportData:         () => exportData(),
+
+  // трекер
+  navigate:           el => navigate(parseInt(el.dataset.arg, 10)),
+  setView:            el => setView(el.dataset.arg),
+  setTab:             el => setTab(el.dataset.arg),
+
+  // цели
+  openGoalModal:      () => openGoalModal(),
+  closeGoalModal:     () => closeGoalModal(),
+  saveGoalModal:      () => saveGoalModal(),
+  clearGoalDue:       () => clearGoalDue(),
+  toggleGoalArchive:  () => toggleGoalArchive(),
+  openGoalEmoji:      el => openGoalEmoji(el),
+  closeGoal:          () => closeGoal(),
+
+  // деньги
+  openTxModal:        el => openTxModal(el.dataset.arg),
+  closeTxModal:       () => closeTxModal(),
+  saveTxModal:        () => saveTxModal(),
+  deleteTxFromModal:  () => deleteTxFromModal(),
+  moneyNavigate:      el => moneyNavigate(parseInt(el.dataset.arg, 10)),
+  quickAddTxFrom:     el => quickAddTx(el.dataset.arg),
+  repeatYesterday:    () => repeatYesterday(),
+  openRulesModal:     () => openRulesModal(),
+  closeRulesModal:    () => closeRulesModal(),
+  addRuleFromCurrent: () => addRuleFromCurrent(),
+  openBudgetModal:    () => openBudgetModal(),
+  closeBudgetModal:   () => closeBudgetModal(),
+  saveBudgets:        () => saveBudgets(),
+
+  // принципы и цитаты
+  openCredoModal:     () => openCredoModal(),
+  openQuoteModal:     () => openQuoteModal(),
+  nextQuote:          () => nextQuote(),
+  saveCurrentQuote:   () => saveCurrentQuote(),
+
+  // общая модалка ввода
+  closeTextModal:     () => closeTextModal(),
+  saveTextModal:      () => saveTextModal(),
+  deleteFromTextModal:() => deleteFromTextModal(),
+
+  // элементы, которые рисует сам код
+  quickAddTx:         () => quickAddTx(),
+  'pick-emoji':       el => pickEmoji(el.dataset.arg),
+  'emoji-open':       el => openEmojiPicker(parseInt(el.dataset.idx, 10), el),
+  'toggle-dow':       el => toggleDow(parseInt(el.dataset.idx, 10), parseInt(el.dataset.day, 10)),
+  'archive-habit':    el => archiveHabit(parseInt(el.dataset.idx, 10)),
+  'unarchive-habit':  el => unarchiveHabit(parseInt(el.dataset.idx, 10)),
+  'remove-habit':     el => removeHabit(parseInt(el.dataset.idx, 10)),
+  'pick-goal-color':  el => pickGoalColor(el.dataset.arg),
+  'toggle-goal-habit':el => toggleGoalHabit(el.dataset.arg),
+  'pick-text-cat':    el => pickTextModalCat(el.dataset.arg),
+  'pick-tx-cat':      el => pickTxCat(el.dataset.arg),
+  'crop-save':        () => cropAndSave(),
+  'crop-cancel':      () => { const c = document.getElementById('crop-overlay'); if(c) c.remove(); }
+};
+
+// Поля ввода: изменение значения и Enter. Тоже вынесены из разметки —
+// инлайновые обработчики требуют 'unsafe-inline' в политике безопасности.
+const CHANGE_ACTIONS = {
+  'sched-type':  (el, i) => setSchedType(i, el.value),
+  'sched-times': (el, i) => setSchedTimes(i, el.value),
+  'set-target':  (el, i) => setTarget(i, el.value)
+};
+
+document.addEventListener('change', e=>{
+  const el = e.target.closest('[data-change]');
+  if(el){
+    const fn = CHANGE_ACTIONS[el.dataset.change];
+    if(fn) fn(el, parseInt(el.dataset.idx, 10));
+    return;
+  }
+  // Загрузка файлов: аватар, импорт данных, импорт выписки.
+  if(e.target.id === 'avatar-upload') uploadAvatar(e);
+  else if(e.target.id === 'import-file') importData(e);
+  else if(e.target.id === 'csv-file') importCsv(e);
+});
+
+document.addEventListener('input', e=>{
+  const el = e.target.closest('[data-input="habit-name"]');
+  if(!el) return;
+  const i = parseInt(el.dataset.idx, 10);
+  if(editBuffer[i]) editBuffer[i].name = el.value;
+});
+
+// Enter в однострочных полях: где раньше стояло onkeydown в разметке.
+const ENTER_ACTIONS = {
+  'auth-email':        () => sendMagicLink(),
+  'new-habit-input':   () => addHabit(),
+  'quick-tx':          () => quickAddTx('quick-tx'),
+  'quick-tx-money':    () => quickAddTx('quick-tx-money')
+};
+
+document.addEventListener('keydown', e=>{
+  if(e.key !== 'Enter') return;
+  const id = e.target && e.target.id;
+  const fn = id && ENTER_ACTIONS[id];
+  if(fn){ e.preventDefault(); fn(); }
+});
+
 document.addEventListener('click', e=>{
   const el = e.target.closest('[data-act]');
   if(!el) return;
-  const fn = SECTION_ACTIONS[el.dataset.act];
-  if(fn){ e.preventDefault(); fn(el); }
+  const act = el.dataset.act;
+  const fn = SECTION_ACTIONS[act] || STATIC_ACTIONS[act];
+  if(fn){ e.preventDefault(); fn(el, e); }
 });
 
 // ── ВКЛАДКИ ───────────────────────────────────────────────────────────────
@@ -3011,11 +3310,15 @@ function deleteTask(id){
   const i = list.findIndex(x => x.id === id);
   if(i === -1) return;
   const removed = list.splice(i, 1)[0];
+  // Пункты списка ста — записи верхнего уровня, их удаление нужно помнить,
+  // иначе оно не доедет до второго устройства.
+  if(currentSectionName() === 'list100') markDeleted('list100', removed.id);
   saveSection(currentSectionName());
   renderGoalDetail();
   // Удаление без отмены — самая частая причина потерянных данных.
   toast('Удалено: ' + removed.text, false, ()=>{
     list.splice(i, 0, removed);
+    if(currentSectionName() === 'list100') unmarkDeleted('list100', removed.id);
     saveSection(currentSectionName());
     renderGoalDetail();
   });
@@ -3048,7 +3351,7 @@ function openGoalModal(id){
     '<button class="color-dot" style="background:' + c + '"' +
     ' aria-pressed="' + (c === goalDraft.color ? 'true' : 'false') + '"' +
     ' aria-label="Цвет"' +
-    ' onclick="pickGoalColor(\'' + c + '\')"></button>').join('');
+    ' data-act="pick-goal-color" data-arg="' + c + '"></button>').join('');
 
   const m = document.getElementById('goal-modal');
   m.classList.add('open');
@@ -3067,7 +3370,7 @@ function pickGoalColor(c){
     '<button class="color-dot" style="background:' + x + '"' +
     ' aria-pressed="' + (x === goalDraft.color ? 'true' : 'false') + '"' +
     ' aria-label="Цвет"' +
-    ' onclick="pickGoalColor(\'' + x + '\')"></button>').join('');
+    ' data-act="pick-goal-color" data-arg="' + x + '"></button>').join('');
 }
 
 function hexToRgb(hex){
@@ -3092,7 +3395,7 @@ function renderGoalHabits(){
   box.innerHTML = list.map(h=>
     '<button type="button" class="cat-chip"' +
       ' aria-pressed="' + (goalDraft.habitIds.indexOf(h.id) !== -1 ? 'true' : 'false') + '"' +
-      ' onclick="toggleGoalHabit(\'' + esc(h.id).replace(/'/g, '') + '\')">' +
+      ' data-act="toggle-goal-habit" data-arg="' + esc(h.id) + '">' +
       esc(h.icon || '•') + ' ' + esc(h.name) + '</button>').join('');
 }
 
@@ -3166,10 +3469,12 @@ function deleteGoal(id){
   if(count && !confirm('Удалить цель «' + g.name + '» вместе с ' + count + ' задачами?')) return;
 
   const removed = sections.goals.splice(i, 1)[0];
+  markDeleted('goals', removed.id);
   saveSection('goals');
   setTab('focus');
   toast('Цель удалена: ' + removed.name, false, ()=>{
     sections.goals.splice(i, 0, removed);
+    unmarkDeleted('goals', removed.id);
     saveSection('goals');
     renderFocus();
   });
@@ -3357,12 +3662,14 @@ function editCredo(id){
     onDelete: ()=>{
       const i = sections.credo.findIndex(x => x.id === id);
       const removed = sections.credo.splice(i, 1)[0];
+      markDeleted('credo', removed.id);
       saveSection('credo');
-      renderCredo();
+      renderCurrent();
       toast('Принцип удалён', false, ()=>{
         sections.credo.splice(i, 0, removed);
+        unmarkDeleted('credo', removed.id);
         saveSection('credo');
-        renderCredo();
+        renderCurrent();
       });
     }
   });
@@ -3433,10 +3740,12 @@ function editQuote(id){
     onDelete: ()=>{
       const i = sections.quotes.findIndex(x => x.id === id);
       const removed = sections.quotes.splice(i, 1)[0];
+      markDeleted('quotes', removed.id);
       saveSection('quotes');
       renderQuotes();
       toast('Цитата удалена', false, ()=>{
         sections.quotes.splice(i, 0, removed);
+        unmarkDeleted('quotes', removed.id);
         saveSection('quotes');
         renderQuotes();
       });
@@ -3494,7 +3803,7 @@ function renderTextModalCats(){
   document.getElementById('text-modal-cats').innerHTML = opts.cats.map(c=>
     '<button type="button" class="cat-chip"' +
     ' aria-pressed="' + (c.id === opts.cat ? 'true' : 'false') + '"' +
-    ' onclick="pickTextModalCat(\'' + c.id + '\')">' +
+    ' data-act="pick-text-cat" data-arg="' + esc(c.id) + '">' +
     esc(c.icon) + ' ' + esc(c.name) + '</button>').join('');
 }
 
@@ -3963,10 +4272,12 @@ function deleteRule(id){
   const i = sections.money_rules.findIndex(r => r.id === id);
   if(i === -1) return;
   const removed = sections.money_rules.splice(i, 1)[0];
+  markDeleted('money_rules', removed.id);
   saveSection('money_rules');
   renderRules();
   toast('Правило удалено', false, ()=>{
     sections.money_rules.splice(i, 0, removed);
+    unmarkDeleted('money_rules', removed.id);
     saveSection('money_rules');
     renderRules();
   });
@@ -4002,6 +4313,11 @@ function saveBudgets(){
   document.querySelectorAll('#budget-list .budget-input').forEach(inp=>{
     const limit = parseAmount(inp.value);
     if(limit > 0) next.push({cat: inp.dataset.cat, limit: limit});
+  });
+  // Снятый лимит — это удаление записи: без пометки он вернулся бы
+  // со второго устройства при следующей синхронизации.
+  sections.budgets.forEach(b=>{
+    if(b && !next.some(n => n.cat === b.cat)) markDeleted('budgets', b.cat);
   });
   sections.budgets = next;
   saveSection('budgets');
@@ -4243,7 +4559,7 @@ function openTxModal(kind, id){
 function renderTxCategories(){
   document.getElementById('tx-categories').innerHTML = MONEY_CATS[txDraft.kind].map(c=>
     '<button class="cat-chip" aria-pressed="' + (c.id === txDraft.category ? 'true' : 'false') + '"' +
-    ' onclick="pickTxCat(\'' + c.id + '\')">' + esc(c.icon) + ' ' + esc(c.name) + '</button>').join('');
+    ' data-act="pick-tx-cat" data-arg="' + esc(c.id) + '">' + esc(c.icon) + ' ' + esc(c.name) + '</button>').join('');
 }
 
 function pickTxCat(id){
@@ -4407,6 +4723,7 @@ async function deleteTxFromModal(){
       currentUser = null;
       data = {};
       sections = {goals: [], list100: [], credo: [], quotes: [], money_rules: [], budgets: []};
+      tombs = {goals: {}, list100: {}, credo: {}, quotes: {}, money_rules: {}, budgets: {}};
       txs = [];
       moneyLoaded = false;
       showScreen('auth');

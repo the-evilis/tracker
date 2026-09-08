@@ -33,9 +33,26 @@ function habitSchedule(h) {
   return {type: 'daily'};
 }
 
+// График, действовавший в конкретный день. Приложение запоминает смену
+// расписания в h.schedHistory, иначе прошлые серии пересчитывались бы по
+// новому графику — бот обязан считать так же, иначе его цифры разойдутся
+// с экраном.
+function scheduleAt(h, date) {
+  const hist = h && Array.isArray(h.schedHistory) ? h.schedHistory : null;
+  if (!hist || !hist.length) return habitSchedule(h);
+
+  const iso = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') +
+              '-' + String(date.getDate()).padStart(2, '0');
+  let found = null;
+  for (let i = 0; i < hist.length; i++) {
+    if (hist[i] && hist[i].from <= iso) found = hist[i]; else break;
+  }
+  return found ? habitSchedule({schedule: found.schedule}) : habitSchedule(h);
+}
+
 // Ждём ли отметку в этот день. Для «N раз в неделю» подходит любой день.
 function isPlannedDay(h, date) {
-  const s = habitSchedule(h);
+  const s = scheduleAt(h, date);
   if (s.type === 'weekdays') return s.days.indexOf(date.getDay()) !== -1;
   return true;
 }
@@ -174,7 +191,7 @@ function plural(n, one, few, many) {
 }
 
 module.exports = {
-  dkey, keyFor, habitSchedule, isPlannedDay, scheduleLabel, activeHabits,
+  dkey, keyFor, habitSchedule, scheduleAt, isPlannedDay, scheduleLabel, activeHabits,
   habitTarget, mondayOf, doneInWeek, getStreak, getMonthPct,
   pendingToday, doneToday, plannedToday, habitById, plural
 };

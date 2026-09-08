@@ -19,7 +19,7 @@ let ty = today.getFullYear(), tm = today.getMonth(), td = today.getDate();
 let data = {}, HABITS = [];
 const MON_S=['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
 
-const names = ['dkey','habitSchedule','isPlannedDay','scheduleLabel','activeHabits',
+const names = ['dkey','habitSchedule','scheduleAt','pushScheduleHistory','isPlannedDay','scheduleLabel','activeHabits',
                'archivedHabits','habitTarget','dayObj','mondayOf','doneInWeek',
                'getStreak','streakUnit','countMarks','getMonthPct','checkAllDone',
                'plural','habitById','isToday','isFuture'];
@@ -136,6 +136,42 @@ check('11 недель', f.plural(11,'неделя','недели','недель
 check('21 неделя', f.plural(21,'неделя','недели','недель'), 'неделя');
 check('1 отметка', f.plural(1,'отметка','отметки','отметок'), 'отметка');
 check('5 отметок', f.plural(5,'отметка','отметки','отметок'), 'отметок');
+
+console.log('\n13. История графиков: прошлое считается по прежнему расписанию');
+{
+  // Привычка была ежедневной, а 25 февраля стала «пн, ср, пт».
+  const h = {
+    id: 'hh', name: 'Зал', color: '#000',
+    schedule: {type:'weekdays', days:[1,3,5]},
+    schedHistory: [
+      {from: '0000-00-00', schedule: {type:'daily'}},
+      {from: '2026-02-25', schedule: {type:'weekdays', days:[1,3,5]}}
+    ]
+  };
+  // 24 февраля 2026 — вторник: по старому графику день плановый.
+  check('до смены графика вторник плановый', f.isPlannedDay(h, D(2026,1,24)), true);
+  // 3 марта 2026 — вторник: по новому уже нет.
+  check('после смены вторник не плановый', f.isPlannedDay(h, D(2026,2,3)), false);
+  check('после смены среда плановая',      f.isPlannedDay(h, D(2026,2,4)), true);
+
+  check('без истории берётся текущий график',
+        f.scheduleAt({schedule:{type:'times_per_week',n:2}}, D(2026,1,24)),
+        {type:'times_per_week', n:2});
+
+  // Фиксация смены: сегодня в тесте — 1 марта 2026.
+  const fresh = {id:'x', schedule:{type:'times_per_week', n:3}};
+  f.pushScheduleHistory(fresh, {type:'daily'});
+  check('история заведена с двумя записями', fresh.schedHistory.length, 2);
+  check('первая запись — прежний график', fresh.schedHistory[0].schedule, {type:'daily'});
+  check('вторая запись датирована сегодняшним днём', fresh.schedHistory[1].from, '2026-03-01');
+
+  // Повторная правка в тот же день не плодит записи.
+  fresh.schedule = {type:'weekdays', days:[2,4]};
+  f.pushScheduleHistory(fresh, {type:'times_per_week', n:3});
+  check('вторая правка за день не добавляет запись', fresh.schedHistory.length, 2);
+  check('запись за сегодня обновилась',
+        fresh.schedHistory[1].schedule, {type:'weekdays', days:[2,4]});
+}
 
 console.log('\n' + (fail ? 'ПРОВАЛЕНО: ' + fail + ', пройдено: ' + pass
                           : 'Все проверки пройдены: ' + pass));

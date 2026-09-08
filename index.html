@@ -37,15 +37,15 @@
     <div class="auth-sub">Трекер для тех, кто растёт каждый день</div>
 
     <div class="auth-tabs">
-      <button class="auth-tab active" onclick="switchAuthTab('magic')">Magic Link</button>
-      <button class="auth-tab" onclick="switchAuthTab('google')">Google</button>
+      <button class="auth-tab active" data-act="switchAuthTab" data-arg="magic">Magic Link</button>
+      <button class="auth-tab" data-act="switchAuthTab" data-arg="google">Google</button>
     </div>
 
     <div id="auth-magic-panel">
       <div id="auth-form-area">
         <input class="auth-input" id="auth-email" type="email" placeholder="Ваш email"
-          onkeydown="if(event.key==='Enter')sendMagicLink()">
-        <button class="auth-btn" id="magic-btn" onclick="sendMagicLink()">Отправить ссылку для входа</button>
+          >
+        <button class="auth-btn" id="magic-btn" data-act="sendMagicLink">Отправить ссылку для входа</button>
       </div>
       <div id="auth-magic-sent" class="magic-sent" style="display:none">
         <div class="big-emoji">✉️</div>
@@ -56,7 +56,7 @@
     </div>
 
     <div id="auth-google-panel" style="display:none">
-      <button class="google-btn" onclick="signInWithGoogle()">
+      <button class="google-btn" data-act="signInWithGoogle">
         <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z"/></svg>
         Войти через Google
       </button>
@@ -64,7 +64,7 @@
     </div>
 
     <div style="margin-top:10px">
-      <button class="google-btn" onclick="enterDemo()" style="border-color:var(--accent);color:var(--accent)">
+      <button class="google-btn" data-act="enterDemo" style="border-color:var(--accent);color:var(--accent)">
         <span style="font-size:18px">👁</span>
         Демо-режим (без регистрации)
       </button>
@@ -83,13 +83,13 @@
     <div id="habit-editor"></div>
     <div class="add-row">
       <input class="add-input" id="new-habit-input" placeholder="Название новой привычки..."
-        maxlength="30" onkeydown="if(event.key==='Enter')addHabit()">
-      <button class="btn btn-primary" id="add-habit-btn" onclick="addHabit()">+ Добавить</button>
+        maxlength="30">
+      <button class="btn btn-primary" id="add-habit-btn" data-act="addHabit">+ Добавить</button>
     </div>
     <div id="archive-block"></div>
     <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal()">Отмена</button>
-      <button class="btn btn-primary" onclick="saveHabits()">Сохранить</button>
+      <button class="btn btn-secondary" data-act="closeModal">Отмена</button>
+      <button class="btn btn-primary" data-act="saveHabits">Сохранить</button>
     </div>
   </div>
 </div>
@@ -97,7 +97,7 @@
 <!-- DEMO BANNER -->
 <div id="demo-banner" class="demo-banner" style="display:none" role="status">
   <span>👁 Демо-режим: история заполнена для примера, изменения не сохранятся</span>
-  <button onclick="leaveDemo()">Войти и сохранять</button>
+  <button data-act="leaveDemo">Войти и сохранять</button>
 </div>
 
 <!-- MAIN APP -->
@@ -109,20 +109,20 @@
       <div id="sync-status"></div>
     </div>
     <div class="header-btns">
-      <button class="icon-btn" id="edit-btn" onclick="openModal()" title="Редактировать привычки" aria-label="Редактировать привычки"><span style="font-size:20px;line-height:1">⚙️</span></button>
-      <button class="icon-btn" id="sound-btn" onclick="toggleSound()" title="Звук" aria-label="Включить или выключить звук">🔔</button>
-      <button class="icon-btn" id="theme-btn" onclick="toggleTheme()" title="Тема" aria-label="Переключить тему">🌙</button>
-      <div class="user-avatar" id="user-avatar" onclick="toggleUserMenu(event)">
+      <button class="icon-btn" id="edit-btn" data-act="openModal" title="Редактировать привычки" aria-label="Редактировать привычки"><span style="font-size:20px;line-height:1">⚙️</span></button>
+      <button class="icon-btn" id="sound-btn" data-act="toggleSound" title="Звук" aria-label="Включить или выключить звук">🔔</button>
+      <button class="icon-btn" id="theme-btn" data-act="toggleTheme" title="Тема" aria-label="Переключить тему">🌙</button>
+      <div class="user-avatar" id="user-avatar" data-act="toggleUserMenu" data-arg="event">
         <div class="user-menu" id="user-menu">
           <div class="user-email" id="user-email-display"></div>
           <label class="user-menu-item" style="cursor:pointer;display:flex;align-items:center;gap:8px">
             📷 Фото (на этом устройстве)
-            <input type="file" id="avatar-upload" accept="image/*" style="display:none" onchange="uploadAvatar(event)">
+            <input type="file" id="avatar-upload" accept="image/*" style="display:none">
           </label>
-          <button class="user-menu-item" id="export-btn" onclick="exportData()" style="width:100%;text-align:left;border:none;background:none;cursor:pointer;font-family:var(--sans)">⬇️ Скачать данные</button>
+          <button class="user-menu-item" id="export-btn" data-act="exportData" style="width:100%;text-align:left;border:none;background:none;cursor:pointer;font-family:var(--sans)">⬇️ Скачать данные</button>
           <label class="user-menu-item" style="cursor:pointer;display:flex;align-items:center;gap:8px">
             ⬆️ Загрузить из файла
-            <input type="file" id="import-file" accept="application/json,.json" style="display:none" onchange="importData(event)">
+            <input type="file" id="import-file" accept="application/json,.json" style="display:none">
           </label>
           <button class="user-menu-item" id="signout-btn" style="width:100%;text-align:left;border:none;background:none;cursor:pointer;font-family:var(--sans)">🚪 Выйти</button>
         </div>
@@ -136,14 +136,14 @@
     <div class="stats-row" id="stats-row"></div>
 
     <div class="nav">
-      <button class="nav-btn" id="btn-prev" onclick="navigate(-1)" aria-label="Назад">←</button>
+      <button class="nav-btn" id="btn-prev" data-act="navigate" data-arg="-1" aria-label="Назад">←</button>
       <span class="nav-title" id="nav-title"></span>
-      <button class="nav-btn" id="btn-next" onclick="navigate(1)" aria-label="Вперёд">→</button>
+      <button class="nav-btn" id="btn-next" data-act="navigate" data-arg="1" aria-label="Вперёд">→</button>
       <div class="view-toggle" role="tablist" aria-label="Период">
-        <button class="view-btn" id="btn-today" onclick="setView('today')" role="tab">Сег.</button>
-        <button class="view-btn" id="btn-week" onclick="setView('week')" role="tab">Нед.</button>
-        <button class="view-btn" id="btn-month" onclick="setView('month')" role="tab">Мес.</button>
-        <button class="view-btn" id="btn-year" onclick="setView('year')" role="tab">Год</button>
+        <button class="view-btn" id="btn-today" data-act="setView" data-arg="today" role="tab">Сег.</button>
+        <button class="view-btn" id="btn-week" data-act="setView" data-arg="week" role="tab">Нед.</button>
+        <button class="view-btn" id="btn-month" data-act="setView" data-arg="month" role="tab">Мес.</button>
+        <button class="view-btn" id="btn-year" data-act="setView" data-arg="year" role="tab">Год</button>
       </div>
     </div>
 
@@ -157,41 +157,40 @@
     <div class="goals-grid" id="goals-grid"></div>
     <div id="goals-archive"></div>
     <div class="section-actions">
-      <button class="btn btn-primary" id="add-goal-btn" onclick="openGoalModal()">+ Новая цель</button>
+      <button class="btn btn-primary" id="add-goal-btn" data-act="openGoalModal">+ Новая цель</button>
     </div>
   </section>
 
   <!-- Отдельный экран одной цели: задачи внутри направления -->
   <section class="tab-panel" id="panel-goal" role="tabpanel" hidden>
-    <button class="back-btn" onclick="closeGoal()">← К целям</button>
+    <button class="back-btn" data-act="closeGoal">← К целям</button>
     <div id="goal-detail"></div>
   </section>
 
   <!-- ── MONEY: доходы, расходы и графики ──────────────────────────────── -->
   <section class="tab-panel" id="panel-money" role="tabpanel" aria-labelledby="tab-money" hidden>
     <div class="nav">
-      <button class="nav-btn" id="money-prev" onclick="moneyNavigate(-1)" aria-label="Предыдущий месяц">←</button>
+      <button class="nav-btn" id="money-prev" data-act="moneyNavigate" data-arg="-1" aria-label="Предыдущий месяц">←</button>
       <span class="nav-title" id="money-title"></span>
-      <button class="nav-btn" id="money-next" onclick="moneyNavigate(1)" aria-label="Следующий месяц">→</button>
+      <button class="nav-btn" id="money-next" data-act="moneyNavigate" data-arg="1" aria-label="Следующий месяц">→</button>
     </div>
     <div class="stats-row" id="money-stats"></div>
     <div class="section-actions">
-      <button class="btn btn-expense" onclick="openTxModal('expense')">− Расход</button>
-      <button class="btn btn-income" onclick="openTxModal('income')">+ Доход</button>
+      <button class="btn btn-expense" data-act="openTxModal" data-arg="expense">− Расход</button>
+      <button class="btn btn-income" data-act="openTxModal" data-arg="income">+ Доход</button>
     </div>
     <div class="quick-row">
       <input class="add-input quick-input" id="quick-tx-money" placeholder="850 кафе"
-             autocomplete="off" onkeydown="if(event.key==='Enter')quickAddTxFrom('quick-tx-money')">
-      <button class="btn btn-primary" onclick="quickAddTxFrom('quick-tx-money')">Записать</button>
+             autocomplete="off">
+      <button class="btn btn-primary" data-act="quickAddTxFrom" data-arg="quick-tx-money">Записать</button>
     </div>
     <div class="money-tools">
-      <button class="link-btn" onclick="repeatYesterday()">⧉ Повторить вчера</button>
-      <button class="link-btn" onclick="openRulesModal()">↻ Повторяющиеся</button>
-      <button class="link-btn" onclick="openBudgetModal()">◎ Бюджеты</button>
+      <button class="link-btn" data-act="repeatYesterday">⧉ Повторить вчера</button>
+      <button class="link-btn" data-act="openRulesModal">↻ Повторяющиеся</button>
+      <button class="link-btn" data-act="openBudgetModal">◎ Бюджеты</button>
       <label class="link-btn" style="cursor:pointer">
         ⬆ Импорт CSV
-        <input type="file" id="csv-file" accept=".csv,text/csv" style="display:none"
-               onchange="importCsv(event)">
+        <input type="file" id="csv-file" accept=".csv,text/csv" style="display:none">
       </label>
     </div>
     <div id="money-budgets"></div>
@@ -204,23 +203,23 @@
     <div id="credo-today"></div>
     <div id="credo-list"></div>
     <div class="section-actions">
-      <button class="btn btn-primary" id="add-credo-btn" onclick="openCredoModal()">+ Новый принцип</button>
+      <button class="btn btn-primary" id="add-credo-btn" data-act="openCredoModal">+ Новый принцип</button>
     </div>
   </section>
 
   <!-- ── QUOTES: цитаты ────────────────────────────────────────────────── -->
   <section class="tab-panel" id="panel-quotes" role="tabpanel" aria-labelledby="tab-quotes" hidden>
-    <div class="quote-card" onclick="nextQuote()">
+    <div class="quote-card" data-act="nextQuote">
       <div class="quote-text" id="quote-text"></div>
       <div class="quote-author" id="quote-author"></div>
     </div>
     <div class="quote-actions">
-      <button class="btn btn-secondary" onclick="nextQuote()">↻ Другая</button>
-      <button class="btn btn-primary" id="save-quote-btn" onclick="saveCurrentQuote()">+ Сохранить себе</button>
+      <button class="btn btn-secondary" data-act="nextQuote">↻ Другая</button>
+      <button class="btn btn-primary" id="save-quote-btn" data-act="saveCurrentQuote">+ Сохранить себе</button>
     </div>
     <div id="quotes-list"></div>
     <div class="section-actions">
-      <button class="btn btn-primary" id="add-quote-btn" onclick="openQuoteModal()">+ Своя цитата</button>
+      <button class="btn btn-primary" id="add-quote-btn" data-act="openQuoteModal">+ Своя цитата</button>
     </div>
   </section>
 
@@ -229,19 +228,19 @@
 
 <!-- ── НИЖНЕЕ МЕНЮ ─────────────────────────────────────────────────────── -->
 <nav class="tabbar" id="tabbar" role="tablist" aria-label="Разделы" style="display:none">
-  <button class="tab-btn" id="tab-focus" role="tab" aria-selected="false" aria-controls="panel-focus" onclick="setTab('focus')">
+  <button class="tab-btn" id="tab-focus" role="tab" aria-selected="false" aria-controls="panel-focus" data-act="setTab" data-arg="focus">
     <span class="tab-ico">🎯</span><span class="tab-lbl">Focus</span>
   </button>
-  <button class="tab-btn" id="tab-money" role="tab" aria-selected="false" aria-controls="panel-money" onclick="setTab('money')">
+  <button class="tab-btn" id="tab-money" role="tab" aria-selected="false" aria-controls="panel-money" data-act="setTab" data-arg="money">
     <span class="tab-ico">💰</span><span class="tab-lbl">Money</span>
   </button>
-  <button class="tab-btn active" id="tab-tracker" role="tab" aria-selected="true" aria-controls="panel-tracker" onclick="setTab('tracker')">
+  <button class="tab-btn active" id="tab-tracker" role="tab" aria-selected="true" aria-controls="panel-tracker" data-act="setTab" data-arg="tracker">
     <span class="tab-ico">✅</span><span class="tab-lbl">Tracker</span>
   </button>
-  <button class="tab-btn" id="tab-credo" role="tab" aria-selected="false" aria-controls="panel-credo" onclick="setTab('credo')">
+  <button class="tab-btn" id="tab-credo" role="tab" aria-selected="false" aria-controls="panel-credo" data-act="setTab" data-arg="credo">
     <span class="tab-ico">🧭</span><span class="tab-lbl">Credo</span>
   </button>
-  <button class="tab-btn" id="tab-quotes" role="tab" aria-selected="false" aria-controls="panel-quotes" onclick="setTab('quotes')">
+  <button class="tab-btn" id="tab-quotes" role="tab" aria-selected="false" aria-controls="panel-quotes" data-act="setTab" data-arg="quotes">
     <span class="tab-ico">💬</span><span class="tab-lbl">Quotes</span>
   </button>
 </nav>
@@ -251,7 +250,7 @@
   <div class="modal">
     <h2 id="goal-modal-title">Новая цель</h2>
     <div class="field-row">
-      <button class="edit-icon-btn" id="goal-icon-btn" onclick="openGoalEmoji(this)" title="Значок" aria-label="Выбрать значок">🎯</button>
+      <button class="edit-icon-btn" id="goal-icon-btn" data-act="openGoalEmoji" data-arg="this" title="Значок" aria-label="Выбрать значок">🎯</button>
       <input class="add-input" id="goal-name" placeholder="Название цели" maxlength="40">
     </div>
     <div class="color-row" id="goal-colors"></div>
@@ -259,16 +258,16 @@
     <label class="field-label" for="goal-due">Срок (необязательно)</label>
     <div class="field-row">
       <input class="add-input" id="goal-due" type="date">
-      <button class="btn btn-secondary" onclick="clearGoalDue()">Убрать</button>
+      <button class="btn btn-secondary" data-act="clearGoalDue">Убрать</button>
     </div>
 
     <div class="field-label">Привычки этой цели</div>
     <div class="habit-pick" id="goal-habits"></div>
 
     <div class="modal-footer">
-      <button class="btn btn-danger" id="goal-archive-btn" onclick="toggleGoalArchive()" style="display:none">В архив</button>
-      <button class="btn btn-secondary" onclick="closeGoalModal()">Отмена</button>
-      <button class="btn btn-primary" id="goal-save-btn" onclick="saveGoalModal()">Сохранить</button>
+      <button class="btn btn-danger" id="goal-archive-btn" data-act="toggleGoalArchive" style="display:none">В архив</button>
+      <button class="btn btn-secondary" data-act="closeGoalModal">Отмена</button>
+      <button class="btn btn-primary" id="goal-save-btn" data-act="saveGoalModal">Сохранить</button>
     </div>
   </div>
 </div>
@@ -287,9 +286,9 @@
       <input class="add-input" id="tx-note" placeholder="Заметка (необязательно)" maxlength="80">
     </div>
     <div class="modal-footer">
-      <button class="btn btn-danger" id="tx-delete-btn" onclick="deleteTxFromModal()" style="display:none">Удалить</button>
-      <button class="btn btn-secondary" onclick="closeTxModal()">Отмена</button>
-      <button class="btn btn-primary" id="tx-save-btn" onclick="saveTxModal()">Сохранить</button>
+      <button class="btn btn-danger" id="tx-delete-btn" data-act="deleteTxFromModal" style="display:none">Удалить</button>
+      <button class="btn btn-secondary" data-act="closeTxModal">Отмена</button>
+      <button class="btn btn-primary" id="tx-save-btn" data-act="saveTxModal">Сохранить</button>
     </div>
   </div>
 </div>
@@ -302,8 +301,8 @@
       добавляет их все — вводить руками каждый раз не нужно.</p>
     <div id="rules-list"></div>
     <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeRulesModal()">Закрыть</button>
-      <button class="btn btn-primary" onclick="addRuleFromCurrent()">+ Из этого месяца</button>
+      <button class="btn btn-secondary" data-act="closeRulesModal">Закрыть</button>
+      <button class="btn btn-primary" data-act="addRuleFromCurrent">+ Из этого месяца</button>
     </div>
   </div>
 </div>
@@ -316,8 +315,8 @@
       подсвечивается в списке над графиками.</p>
     <div id="budget-list"></div>
     <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeBudgetModal()">Отмена</button>
-      <button class="btn btn-primary" onclick="saveBudgets()">Сохранить</button>
+      <button class="btn btn-secondary" data-act="closeBudgetModal">Отмена</button>
+      <button class="btn btn-primary" data-act="saveBudgets">Сохранить</button>
     </div>
   </div>
 </div>
@@ -330,9 +329,9 @@
     <div class="cat-row" id="text-modal-cats" style="display:none"></div>
     <input class="add-input" id="text-modal-extra" placeholder="Автор" maxlength="60" style="display:none">
     <div class="modal-footer">
-      <button class="btn btn-danger" id="text-modal-delete" onclick="deleteFromTextModal()" style="display:none">Удалить</button>
-      <button class="btn btn-secondary" onclick="closeTextModal()">Отмена</button>
-      <button class="btn btn-primary" id="text-modal-save" onclick="saveTextModal()">Сохранить</button>
+      <button class="btn btn-danger" id="text-modal-delete" data-act="deleteFromTextModal" style="display:none">Удалить</button>
+      <button class="btn btn-secondary" data-act="closeTextModal">Отмена</button>
+      <button class="btn btn-primary" id="text-modal-save" data-act="saveTextModal">Сохранить</button>
     </div>
   </div>
 </div>

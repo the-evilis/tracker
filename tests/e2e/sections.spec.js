@@ -534,6 +534,71 @@ test('Money: импорт CSV разбирает дату, сумму и зна�
   expect(imported.ts).toBe('2026-09-06');
 });
 
+test('слияние разделов: правка со второго устройства не затирает свежую', async ({page}) => {
+  await openTab(page, 'credo');
+
+  // Изображаем то, что приходит с сервера: одна запись изменена давно,
+  // другая — свежая, третья удалена на другом устройстве.
+  const result = await page.evaluate(() => {
+    sections.credo = [
+      {id: 'a', text: 'локальная свежая', u: 5000},
+      {id: 'b', text: 'локальная старая', u: 1000},
+      {id: 'c', text: 'останется как есть', u: 2000}
+    ];
+    refreshSnapshot('credo');
+
+    mergeSection('credo', [
+      {id: 'a', text: 'серверная старая', u: 3000},   // старее локальной
+      {id: 'b', text: 'серверная свежая', u: 7000},   // новее локальной
+      {id: 'd', text: 'появилась на сервере', u: 4000}
+    ], {c: 9000});                                     // c удалена позже правки
+
+    return sections.credo.map(x => x.id + ':' + x.text);
+  });
+
+  expect(result).toContain('a:локальная свежая');    // локальная новее — победила
+  expect(result).toContain('b:серверная свежая');    // серверная новее — победила
+  expect(result).toContain('d:появилась на сервере');
+  expect(result.join()).not.toContain('c:');          // удалённая не воскресла
+});
+
+test('удалённая запись не возвращается с сервера', async ({page}) => {
+  await openTab(page, 'quotes');
+
+  const back = await page.evaluate(() => {
+    sections.quotes = [{id: 'q1', text: 'Цитата', author: '', fav: false, u: 1000}];
+    refreshSnapshot('quotes');
+
+    // Удаляем локально, как это делает кнопка.
+    sections.quotes.splice(0, 1);
+    markDeleted('quotes', 'q1');
+
+    // Сервер всё ещё присылает её — она не должна вернуться.
+    mergeSection('quotes', [{id: 'q1', text: 'Цитата', author: '', fav: false, u: 1000}], {});
+    return sections.quotes.length;
+  });
+
+  expect(back).toBe(0);
+});
+
+test('правка помечается временем только у изменённой записи', async ({page}) => {
+  await openTab(page, 'credo');
+
+  const stamps = await page.evaluate(() => {
+    sections.credo = [{id: 'a', text: 'первая'}, {id: 'b', text: 'вторая'}];
+    saveSection('credo');
+    const first = sections.credo.map(x => x.u);
+
+    // Меняем только вторую запись.
+    sections.credo[1].text = 'вторая изменённая';
+    saveSection('credo');
+    return {first, second: sections.credo.map(x => x.u)};
+  });
+
+  expect(stamps.second[0]).toBe(stamps.first[0]);        // нетронутая не обновилась
+  expect(stamps.second[1]).toBeGreaterThanOrEqual(stamps.first[1]);
+});
+
 test('разделы не ходят в сеть в демо-режиме', async ({page, sbRequests}) => {
   await openDemo(page);
 

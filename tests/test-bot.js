@@ -30,7 +30,7 @@ let ty = today.getFullYear(), tm = today.getMonth(), td = today.getDate();
 let data = {}, HABITS = [];
 const MON_S=['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
 
-const names = ['dkey','habitSchedule','isPlannedDay','scheduleLabel','activeHabits',
+const names = ['dkey','habitSchedule','scheduleAt','isPlannedDay','scheduleLabel','activeHabits',
                'habitTarget','dayObj','mondayOf','doneInWeek','getStreak',
                'getMonthPct','plural','habitById'];
 eval(names.map(grab).join('\n') + '\nglobalThis.__app={' + names.join(',') + '};');
@@ -111,6 +111,24 @@ console.log('\n3. Плановые дни совпадают на 60 днях п
     cur.setDate(cur.getDate() + 1);
   }
   check('расхождений нет', mismatch, 0);
+}
+
+console.log('\n3a. История графиков читается ботом так же, как приложением');
+{
+  const h = {
+    id: 'hh', name: 'Зал', color: '#000',
+    schedule: {type:'weekdays', days:[1,3,5]},
+    schedHistory: [
+      {from: '0000-00-00', schedule: {type:'daily'}},
+      {from: '2026-02-25', schedule: {type:'weekdays', days:[1,3,5]}}
+    ]
+  };
+  const days = [new Date(2026,1,24), new Date(2026,2,3), new Date(2026,2,4)];
+  let bad = 0;
+  days.forEach(d=>{ if(H.isPlannedDay(h, d) !== app.isPlannedDay(h, app.dayObj(d))) bad++; });
+  check('расхождений нет', bad, 0);
+  check('до смены графика вторник плановый', H.isPlannedDay(h, new Date(2026,1,24)), true);
+  check('после смены вторник не плановый',   H.isPlannedDay(h, new Date(2026,2,3)), false);
 }
 
 console.log('\n4. Серии и проценты совпадают с приложением');
