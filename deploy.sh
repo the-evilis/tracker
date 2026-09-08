@@ -10,7 +10,7 @@ LOG="/var/log/tracker-deploy.log"
 # Файлы приложения. Без index.html, app.js и styles.css страница не работает
 # вовсе, поэтому они обязательны; остальное — по возможности (иконки и
 # service worker появились вместе с PWA).
-REQUIRED="index.html app.js styles.css"
+REQUIRED="index.html styles.css app-core.js app-habits.js app-misc.js app-sections.js app-money.js app-init.js"
 OPTIONAL="manifest.json sw.js icon-192.png icon-512.png icon-maskable-512.png"
 
 log() { echo "[$(date '+%F %T')] $*" | tee -a "$LOG"; }

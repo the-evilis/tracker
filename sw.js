@@ -3,15 +3,20 @@
 // в localStorage, а несинхронизированные отметки — в очереди внутри
 // приложения, поэтому здесь достаточно кэшировать саму оболочку.
 
-const CACHE = 'tracker-v2';
+const CACHE = 'tracker-v3';
 
 // Файлы оболочки. Внешние ресурсы (Supabase, шрифты, CDN) намеренно
 // не кэшируем: они должны ходить в сеть и не мешать обновлению.
 const SHELL = [
   '/',
   '/index.html',
-  '/app.js',
   '/styles.css',
+  '/app-core.js',
+  '/app-habits.js',
+  '/app-misc.js',
+  '/app-sections.js',
+  '/app-money.js',
+  '/app-init.js',
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png'
@@ -20,7 +25,8 @@ const SHELL = [
 // Код и стили обновляются вместе с разметкой, поэтому берутся из сети так
 // же, как HTML. Иначе после деплоя человек получил бы новую страницу со
 // старым скриптом из кэша — и приложение сломалось бы до второй загрузки.
-const NETWORK_FIRST = ['/app.js', '/styles.css'];
+const NETWORK_FIRST = ['/styles.css', '/app-core.js', '/app-habits.js',
+  '/app-misc.js', '/app-sections.js', '/app-money.js', '/app-init.js'];
 
 self.addEventListener('install', event=>{
   event.waitUntil(

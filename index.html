@@ -339,7 +339,16 @@
   </div>
 </div>
 
-<script src="/app.js"></script>
+<!-- Приложение разрезано на части по доменам. Это обычные скрипты, а не
+     ES-модули: они делят общую область видимости, поэтому переписывать
+     вызовы между частями не пришлось, а сборка по-прежнему не нужна.
+     Порядок важен — app-init.js запускает всё и идёт последним. -->
+<script src="/app-core.js"></script>
+<script src="/app-habits.js"></script>
+<script src="/app-misc.js"></script>
+<script src="/app-sections.js"></script>
+<script src="/app-money.js"></script>
+<script src="/app-init.js"></script>
 
 </body>
 </html>

@@ -4,8 +4,8 @@
   "private": true,
   "description": "Трекер привычек — PWA в одном файле index.html",
   "scripts": {
-    "test": "node tests/test-logic.js app.js && node tests/test-schedule.js app.js && node tests/test-bot.js app.js && node tests/test-bot-net.js",
-    "test:syntax": "node tests/check-syntax.js app.js",
+    "test": "node tests/test-logic.js && node tests/test-schedule.js && node tests/test-bot.js && node tests/test-bot-net.js",
+    "test:syntax": "node tests/check-syntax.js",
     "test:e2e": "playwright test",
     "test:all": "npm run test:syntax && npm test && npm run test:e2e",
     "serve": "node tests/serve.js"
